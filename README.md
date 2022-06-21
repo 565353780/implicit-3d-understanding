@@ -6,6 +6,18 @@
 https://github.com/chengzhag/Implicit3DUnderstanding
 ```
 
+## Download
+
+```bash
+https://stduestceducn-my.sharepoint.com/:u:/g/personal/2015010912010_std_uestc_edu_cn/Efs2Tqlkk_pIhy16ud20m5sBMkbkWJEuspiLjdF4G2jOzA?e=sxnswk
+```
+
+unzip it into
+
+```bash
+out/total3d/20110611514267/
+```
+
 ## Install
 
 ```
@@ -39,36 +51,17 @@ python setup.py build_ext -i -f
 cd ../../ldif/ldif2mesh
 bash build.sh
 
-python project.py build
+cd ../../..
 ```
-When running ```python project.py build```, the script will run ```external/build_gaps.sh``` which requires password for sudo privilege for ```apt-get install```.
-Please make sure you are running with a user with sudo privilege.
-If not, please reach your administrator for installation of [these libraries](https://github.com/chengzhag/Implicit3DUnderstanding/blob/af2964f074d941cd990cff81a9b5f75489586ed2/external/build_gaps.sh#L37) and comment out the corresponding lines then run ```python project.py build```.
 
-## Demo
-1. Download the [pretrained checkpoint](https://stduestceducn-my.sharepoint.com/:u:/g/personal/2015010912010_std_uestc_edu_cn/Efs2Tqlkk_pIhy16ud20m5sBMkbkWJEuspiLjdF4G2jOzA?e=sxnswk)
-and unzip it into ```out/total3d/20110611514267/```
+## Run
 
-2. Change current directory to ```Implicit3DUnderstanding/``` and run the demo, which will generate 3D detection result and rendered scene mesh to ```demo/output/1/```
-    ```
-    CUDA_VISIBLE_DEVICES=0 python main.py out/total3d/20110611514267/out_config.yaml --mode demo --demo_path demo/inputs/1
-    ```
+### Demo
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python main.py out/total3d/20110611514267/out_config.yaml --mode demo --demo_path demo/inputs/1
+```
    
-3. In case you want to run it off screen (for example, with SSH)
-    ```
-    CUDA_VISIBLE_DEVICES=0 xvfb-run -a -s "-screen 0 800x600x24" python main.py out/total3d/20110611514267/out_config.yaml --mode demo --demo_path demo/inputs/1
-    ```
-   
-4. If you want to run it interactively, change the last line of demo.py
-    ```
-    scene_box.draw3D(if_save=True, save_path = '%s/recon.png' % (save_path))
-    ```
-    to
-    ```
-    scene_box.draw3D(if_save=False, save_path = '%s/recon.png' % (save_path))
-    ```
-
-
 ## Data preparation
 We follow [Total3DUnderstanding](https://github.com/yinyunie/Total3DUnderstanding) to use [SUN-RGBD](https://rgbd.cs.princeton.edu/) to train our Scene Graph Convolutional Network (SGCN), and use [Pix3D](http://pix3d.csail.mit.edu/) to train our Local Implicit Embedding Network
 (LIEN) with [Local Deep Implicit Functions](https://github.com/google/ldif) (LDIF) decoder.
