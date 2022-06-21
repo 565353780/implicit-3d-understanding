@@ -17,7 +17,7 @@ sudo apt install --reinstall libgl1-mesa-glx
 conda create -n im3d python=3.8
 conda activate im3d
 pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
-pip install wandb tqdm
+pip install wandb tqdm cython
 
 cd external/ldif/gaps
 git clone https://github.com/tomfunkhouser/gaps.git
@@ -30,7 +30,14 @@ cd build
 cmake ..
 make -j
 cd ..
-python setup.py build_ext --inplace
+python setup.py build_ext -i -f
+cd ../librender
+python setup.py build_ext -i -f
+cd ../libmcubes
+python setup.py build_ext -i -f
+
+cd ../../ldif/ldif2mesh
+bash build.sh
 
 python project.py build
 ```

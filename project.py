@@ -84,41 +84,6 @@ def clone(args):
     print(f"Run: {cmd}")
     subprocess.check_output(cmd, shell=True)
 
-def build(args):
-    root = os.path.split(__file__)[0]
-
-        print("Building pyrender...")
-        cmd = ' && '.join([
-            f"cd {os.path.join(mesh_fusion_path, 'librender')}",
-            f"{python_bin} setup.py build_ext --inplace"
-        ])
-        print(f"Run: {cmd}")
-        return
-        subprocess.check_output(cmd, shell=True)
-
-        print("Building PyMCubes...")
-        cmd = ' && '.join([
-            f"cd {os.path.join(mesh_fusion_path, 'libmcubes')}",
-            f"{python_bin} setup.py build_ext --inplace"
-        ])
-        print(f"Run: {cmd}")
-        subprocess.check_output(cmd, shell=True)
-
-    if args.subwork is None or 'ldif2mesh' in args.subwork:
-        print("Building ldif2mesh...")
-        ldif2mesh_path = os.path.join(root, 'external', 'ldif', 'ldif2mesh')
-        cmd = ' && '.join([
-            f"cd {ldif2mesh_path}",
-            f"bash build.sh"
-        ])
-        print(f"Run: {cmd}")
-        subprocess.check_output(cmd, shell=True)
-        subprocess.check_output(f"chmod 744 {os.path.join(ldif2mesh_path, 'ldif2mesh')}", shell=True)
-
-        print(f"Run: {cmd}")
-        os.system(cmd)
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Project utils.')
     parser.add_argument('work', type=str, default='clean',
