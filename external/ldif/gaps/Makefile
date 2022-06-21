@@ -34,9 +34,3 @@ target:
 	cd vc; $(MAKE) $(TARGET)
 	# cd docs; $(MAKE) $(TARGET)
 
-
-
-
-
-
-

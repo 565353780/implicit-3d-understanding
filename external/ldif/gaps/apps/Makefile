@@ -50,14 +50,6 @@ target:
 	cd sflinfo; $(MAKE) $(TARGET)
 	cd sflview; $(MAKE) $(TARGET)
 	cd gapsview; $(MAKE) $(TARGET)
-
-
-
-
-
-
-
-
-
 	cd ptsview; $(MAKE) $(TARGET)
 	cd qview; $(MAKE) $(TARGET)
+

@@ -87,36 +87,13 @@ def clone(args):
 def build(args):
     root = os.path.split(__file__)[0]
 
-    if args.subwork is None or 'gaps' in args.subwork:
-        print("Building gaps...")
-        cmd = ' && '.join([
-            f"cd {os.path.join(root, 'external')}",
-            f"bash build_gaps.sh"
-        ])
-        print(f"Run: {cmd}")
-        subprocess.check_output(cmd, shell=True)
-
-    if args.subwork is None or 'mesh_fusion' in args.subwork:
-        print("Building pyfusion...")
-        mesh_fusion_path = os.path.join(root, 'external', 'mesh_fusion')
-        cmd = ' && '.join([
-            f"cd {os.path.join(mesh_fusion_path, 'libfusiongpu')}",
-            "mkdir -p build",
-            "cd build",
-            "cmake ..",
-            "make",
-            "cd ..",
-            f"{python_bin} setup.py build_ext --inplace"
-        ])
-        print(f"Run: {cmd}")
-        subprocess.check_output(cmd, shell=True)
-
         print("Building pyrender...")
         cmd = ' && '.join([
             f"cd {os.path.join(mesh_fusion_path, 'librender')}",
             f"{python_bin} setup.py build_ext --inplace"
         ])
         print(f"Run: {cmd}")
+        return
         subprocess.check_output(cmd, shell=True)
 
         print("Building PyMCubes...")

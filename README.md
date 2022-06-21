@@ -1,28 +1,37 @@
-# Implicit3DUnderstanding (Im3D) [[Project Page (with interactive results)]](https://chengzhag.github.io/publication/im3d/)[[Paper]](https://arxiv.org/pdf/2103.06422)[[Video]](https://www.youtube.com/watch?v=Kg0du7mFu60)
+# Implicit 3D Understanding (Im3D)
 
-### Holistic 3D Scene Understanding from a Single Image with Implicit Representation
-Cheng Zhang*, Zhaopeng Cui*, Yinda Zhang*, Shuaicheng Liu, Bing Zeng, Marc Pollefeys
+## Source
 
-<img src="demo/inputs/1/img.jpg" alt="img.jpg" width="20%" /> <img src="demo/outputs/1/3dbbox.png" alt="3dbbox.png" width="20%" /> <img src="demo/outputs/1/recon.png" alt="recon.png" width="20%" /> <br>
-<img src="demo/inputs/2/img.jpg" alt="img.jpg" width="20%" /> <img src="demo/outputs/2/3dbbox.png" alt="3dbbox.png" width="20%" /> <img src="demo/outputs/2/recon.png" alt="recon.png" width="20%" /> <br>
-<img src="demo/inputs/3/img.jpg" alt="img.jpg" width="20%" /> <img src="demo/outputs/3/3dbbox.png" alt="3dbbox.png" width="20%" /> <img src="demo/outputs/3/recon.png" alt="recon.png" width="20%" />
-
-![pipeline](figures/pipeline.png)
-
-
-## Introduction
-
-This repo contains training, testing, evaluation, visualization code of our CVPR 2021 paper.
-Specially, the repo contains our PyTorch implementation of the decoder of [LDIF](https://github.com/google/ldif), which can be extracted and used in other projects.
-
+```bash
+https://github.com/chengzhag/Implicit3DUnderstanding
+```
 
 ## Install
 
-Please make sure to install CUDA NVCC on your system first. then run the following:
 ```
 sudo apt install xvfb ninja-build freeglut3-dev libglew-dev meshlab
-conda env create -f environment.yml
-conda activate Im3D
+
+sudo apt install mesa-common-dev libglu1-mesa-dev libosmesa6-dev libxi-dev libgl1-mesa-dev
+sudo apt install --reinstall libgl1-mesa-glx
+
+conda create -n im3d python=3.8
+conda activate im3d
+pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
+pip install wandb tqdm
+
+cd external/ldif/gaps
+git clone https://github.com/tomfunkhouser/gaps.git
+cd gaps
+make mesa -j
+
+cd ../../mesh_fusion/libfusiongpu
+mkdir build
+cd build
+cmake ..
+make -j
+cd ..
+python setup.py build_ext --inplace
+
 python project.py build
 ```
 When running ```python project.py build```, the script will run ```external/build_gaps.sh``` which requires password for sudo privilege for ```apt-get install```.
