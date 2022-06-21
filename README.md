@@ -20,9 +20,16 @@ out/total3d/20110611514267/
 
 ## Install
 
+### Simple
+
+```bash
+./setup.sh
+```
+
+### Step by step
+
 ```
 sudo apt install xvfb ninja-build freeglut3-dev libglew-dev meshlab
-
 sudo apt install mesa-common-dev libglu1-mesa-dev libosmesa6-dev libxi-dev libgl1-mesa-dev
 sudo apt install --reinstall libgl1-mesa-glx
 
@@ -32,8 +39,6 @@ pip install torch torchvision torchaudio --extra-index-url https://download.pyto
 pip install wandb tqdm cython
 
 cd external/ldif/gaps
-git clone https://github.com/tomfunkhouser/gaps.git
-cd gaps
 make mesa -j
 
 cd ../../mesh_fusion/libfusiongpu
@@ -56,12 +61,18 @@ cd ../../..
 
 ## Run
 
-### Demo
+### Simple
+
+```bash
+./run_demo.sh
+```
+
+### Step by step
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python main.py out/total3d/20110611514267/out_config.yaml --mode demo --demo_path demo/inputs/1
 ```
-   
+
 ## Data preparation
 We follow [Total3DUnderstanding](https://github.com/yinyunie/Total3DUnderstanding) to use [SUN-RGBD](https://rgbd.cs.princeton.edu/) to train our Scene Graph Convolutional Network (SGCN), and use [Pix3D](http://pix3d.csail.mit.edu/) to train our Local Implicit Embedding Network
 (LIEN) with [Local Deep Implicit Functions](https://github.com/google/ldif) (LDIF) decoder.
