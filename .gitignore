@@ -191,3 +191,11 @@ octave-workspace
 /out
 /data
 /wandb
+
+# compiled
+__pycache__
+
+# network predict
+*.obj
+*.mat
+
