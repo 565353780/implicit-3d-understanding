@@ -73,9 +73,25 @@ or
 CUDA_VISIBLE_DEVICES=0 python main.py out/total3d/20110611514267/out_config.yaml --mode demo --demo_path demo/inputs/1
 ```
 
-## Data preparation
-We follow [Total3DUnderstanding](https://github.com/yinyunie/Total3DUnderstanding) to use [SUN-RGBD](https://rgbd.cs.princeton.edu/) to train our Scene Graph Convolutional Network (SGCN), and use [Pix3D](http://pix3d.csail.mit.edu/) to train our Local Implicit Embedding Network
-(LIEN) with [Local Deep Implicit Functions](https://github.com/google/ldif) (LDIF) decoder.
+## Train
+
+### SUN RGB-D Dataset
+
+used to train SGCN
+
+```bash
+https://rgbd.cs.princeton.edu/
+```
+
+### Pix3D Dataset
+
+used to train LIEN
+
+```bash
+http://pix3d.csail.mit.edu/
+```
+
+with LDIF decoder
 
 #### Preprocess SUN-RGBD data
 
