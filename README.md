@@ -15,7 +15,7 @@ https://stduestceducn-my.sharepoint.com/:u:/g/personal/2015010912010_std_uestc_e
 unzip it into
 
 ```bash
-out/total3d/20110611514267/
+implicit-3d-understanding/out/total3d/20110611514267/
 ```
 
 ## Install
