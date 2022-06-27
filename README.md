@@ -22,6 +22,13 @@ implicit-3d-understanding/out/total3d/20110611514267/
 
 ```bash
 ./setup.sh
+
+conda create -n im3d python=3.7
+conda activate im3d
+pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
+pip install wandb tqdm cython pytz python-dateutil trimesh scipy scikit-image shapely jellyfish vtk seaborn h5py
+
+./build.sh
 ```
 
 ## Run
@@ -51,6 +58,7 @@ data/pix3d/metadata
 ```
 
 ```bash
+export LIBGL_ALWAYS_INDIRECT=0
 python utils/preprocess_pix3d4ldif.py
 ```
 
