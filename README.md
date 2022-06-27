@@ -25,8 +25,11 @@ implicit-3d-understanding/out/total3d/20110611514267/
 
 conda create -n im3d python=3.7
 conda activate im3d
-pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
-pip install wandb tqdm cython pytz python-dateutil trimesh scipy scikit-image shapely jellyfish vtk seaborn h5py
+pip install torch torchvision torchaudio \
+      --extra-index-url https://download.pytorch.org/whl/cu113
+pip install wandb tqdm cython pytz python-dateutil \
+      trimesh scipy scikit-image shapely jellyfish \
+      vtk seaborn h5py opencv-python
 
 ./build.sh
 ```
