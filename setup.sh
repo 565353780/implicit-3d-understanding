@@ -5,7 +5,7 @@ sudo apt install --reinstall libgl1-mesa-glx
 conda create -n im3d python=3.8
 conda activate im3d
 pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
-pip install wandb tqdm cython
+pip install wandb tqdm cython pytz python-dateutil trimesh scipy scikit-image shapely jellyfish vtk seaborn h5py
 
 cd external/ldif/gaps
 make mesa -j
