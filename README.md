@@ -69,7 +69,27 @@ cd ../../..
 
 ## Train
 
-### SUN RGB-D Dataset
+### Dataset
+
+#### Pix3D
+
+used to train LIEN + LDIF decoder
+
+```bash
+http://pix3d.csail.mit.edu/
+```
+
+and save it to
+
+```bash
+data/pix3d/metadata
+```
+
+```bash
+python utils/preprocess_pix3d4ldif.py
+```
+
+#### SUN RGB-D
 
 used to train SGCN
 
@@ -77,46 +97,23 @@ used to train SGCN
 https://rgbd.cs.princeton.edu/
 ```
 
-### Pix3D Dataset
+Follow [Total3DUnderstanding](https://github.com/yinyunie/Total3DUnderstanding) to download the raw data.
 
-used to train LIEN
+and edit
 
 ```bash
-http://pix3d.csail.mit.edu/
+data/sunrgbd/Dataset/SUNRGBD/kv2/kinect2data/002922_2014-06-26_15-43-16_094959634447_rgbf000089-resize/annotation2Dfinal/index.json
 ```
 
-with LDIF decoder
+```bash
+{"name":""propulsion"tool"}
+->
+{"name":"tool"}
+```
 
-#### Preprocess SUN-RGBD data
-
-Please follow [Total3DUnderstanding](https://github.com/yinyunie/Total3DUnderstanding) to directly download the processed train/test data.
-
-In case you prefer processing by yourself or want to evaluate 3D detection with our code
-(To ultilize the evaluation code of [Coop](https://github.com/thusiyuan/cooperative_scene_parsing), we modified the data processing code of Total3DUnderstanding to save parameters for transforming the coordinate system from Total3D back to Coop),
-please follow these steps:
-
-1. Follow [Total3DUnderstanding](https://github.com/yinyunie/Total3DUnderstanding) to download the raw data.
-
-2. According to [issue #6](https://github.com/yinyunie/Total3DUnderstanding/issues/6) of [Total3DUnderstanding](https://github.com/yinyunie/Total3DUnderstanding),
-there are a few typos in json files of SUNRGBD dataset, which is mostly solved by the json loader.
-However, one typo still needs to be fixed by hand.
-Please find ```{"name":""propulsion"tool"}``` in ```data/sunrgbd/Dataset/SUNRGBD/kv2/kinect2data/002922_2014-06-26_15-43-16_094959634447_rgbf000089-resize/annotation2Dfinal/index.json``` and remove ```""propulsion```.
-
-3. Process the data by
-    ```
-    python -m utils.generate_data
-    ```
-
-#### Preprocess Pix3D data
-We use a different data process pipeline with [Total3DUnderstanding](https://github.com/yinyunie/Total3DUnderstanding). Please follow these steps to generate the train/test data:
-
-1. Download the [Pix3D dataset](http://pix3d.csail.mit.edu/) to ```data/pix3d/metadata```
-
-2. Run below to generate the train/test data into 'data/pix3d/ldif'
-    ```
-    python utils/preprocess_pix3d4ldif.py
-    ```
-
+```bash
+python -m utils.generate_data
+```
 
 ## Training and Testing
 We use [wandb](https://www.wandb.com/) for logging and visualization.
