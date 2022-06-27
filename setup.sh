@@ -7,23 +7,5 @@ conda activate im3d
 pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
 pip install wandb tqdm cython pytz python-dateutil trimesh scipy scikit-image shapely jellyfish vtk seaborn h5py
 
-cd external/ldif/gaps
-make mesa -j
-
-cd ../../mesh_fusion/libfusiongpu
-mkdir build
-cd build
-cmake ..
-make -j
-cd ..
-python setup.py build_ext -i -f
-cd ../librender
-python setup.py build_ext -i -f
-cd ../libmcubes
-python setup.py build_ext -i -f
-
-cd ../../ldif/ldif2mesh
-bash build.sh
-
-cd ../../..
+./build.sh
 
