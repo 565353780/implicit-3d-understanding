@@ -5,7 +5,7 @@
 import argparse
 from configs.config_utils import CONFIG
 import os
-import train, test,demo
+import train, test, demo
 
 
 def parse_args():
