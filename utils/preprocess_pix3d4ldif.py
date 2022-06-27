@@ -12,7 +12,11 @@ import os
 import glob
 import tqdm
 from multiprocessing import Pool
-from libs.tools import read_obj, write_obj, sample_pnts_from_obj, normalize_to_unit_square
+
+#  from libs.tools import read_obj, write_obj, sample_pnts_from_obj, normalize_to_unit_square
+sys.path.append('./libs')
+from tools import read_obj, write_obj, sample_pnts_from_obj, normalize_to_unit_square
+
 from PIL import Image
 import numpy as np
 import json
