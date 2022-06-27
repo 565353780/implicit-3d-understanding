@@ -40,7 +40,7 @@ scheduler:
   factor: 0.5
   threshold: 0.002
 train:
-  epochs: 400
+  epochs: 40000
   phase: 'all'
   freeze: []
   batch_size: 24
