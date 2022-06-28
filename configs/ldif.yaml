@@ -1,5 +1,6 @@
 method: LDIF
-resume: False
+resume: True
+resume_id: '22062721592286'
 finetune: False
 weight: 'out/mgnet//model_best.pth'
 seed: 123

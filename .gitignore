@@ -198,4 +198,5 @@ __pycache__
 # network predict
 *.obj
 *.mat
+*.ply
 
