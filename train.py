@@ -30,13 +30,14 @@ def run(cfg):
     #     cfg.log_string(cfg.config)
 
     if resume:
-        #  cfg.update_config(weight=os.path.join(cfg.config['log']['path'], 'model_last.pth'))
-
-        resume_id = cfg.config['resume_id']
-        resume_path = os.path.join(cfg.config['log']['path'],
-                                   resume_id,
-                                   'model_last.pth')
-        cfg.update_config(weight=resume_path)
+        if 'resume_id' not in cfg.config.keys():
+            cfg.update_config(weight=os.path.join(cfg.config['log']['path'], 'model_last.pth'))
+        else:
+            resume_id = cfg.config['resume_id']
+            resume_path = os.path.join(cfg.config['log']['path'],
+                                       resume_id,
+                                       'model_last.pth')
+            cfg.update_config(weight=resume_path)
 
     '''Begin to run network.'''
     checkpoint = CheckpointIO(cfg)
