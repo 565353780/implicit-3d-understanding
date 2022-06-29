@@ -89,3 +89,34 @@ def load_optimizer(config, net):
                                     momentum=0.9)
     return optimizer
 
+def load_scheduler(config, optimizer):
+    '''
+    get scheduler for optimizer.
+    :param config: configuration file
+    :param optimizer: torch optimizer
+    :return:
+    '''
+    scheduler_dict = config['scheduler']
+
+    method = scheduler_dict.get('method', 'ReduceLROnPlateau')
+    if method == 'ReduceLROnPlateau':
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode='min',
+            factor=float(scheduler_dict['factor']),
+            patience=scheduler_dict['patience'],
+            threshold=float(scheduler_dict['threshold']),
+            verbose=True)
+    elif method == 'StepLR':
+        scheduler = torch.optim.lr_scheduler.StepLR(
+            optimizer,
+            gamma=float(scheduler_dict['gamma']),
+            step_size=int(scheduler_dict['step_size']))
+    elif method == 'MultiStepLR':
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(
+            optimizer,
+            gamma=float(scheduler_dict['gamma']),
+            milestones=scheduler_dict['milestones'])
+    else:
+        raise NotImplementedError
+    return scheduler
+
