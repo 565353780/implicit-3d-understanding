@@ -5,6 +5,9 @@ import os
 import torch
 import wandb
 
+import argparse
+from configs.config_utils import CONFIG
+
 from Config.configs import LDIF_CONFIG
 
 from Method.paths import getModelPath
@@ -15,11 +18,17 @@ class Trainer(object):
         self.config = {}
         self.checkpoint = None
         self.device = None
-        self.data_loader = None
+        self.train_dataloader = None
+        self.test_dataloader = None
         return
 
     def loadConfig(self, config):
         self.config = config
+
+        parser = argparse.ArgumentParser('test1.')
+        parser.add_argument('--config', type=str, default='configs/ldif.yaml')
+        parser.add_argument('--mode', type=str, default='train')
+        self.cfg = CONFIG(parser)
         return True
 
     def loadModel(self):
@@ -33,7 +42,7 @@ class Trainer(object):
 
     def initWandb(self):
         resume = True
-        name = "LDIF_Trainer"
+        name = "test_Trainer"
         id = self.config['log']['path'].split('/')[-2]
 
         wandb.init(project="LDIF_Train",
@@ -50,7 +59,8 @@ class Trainer(object):
         return True
 
     def loadDataset(self, data_loader):
-        self.data_loader = data_loader(self.config, 'train')
+        self.train_dataloader = data_loader(self.cfg.config, 'train')
+        self.test_dataloader = data_loader(self.cfg.config, 'val')
         return True
 
     def initEnv(self, config, data_loader):
