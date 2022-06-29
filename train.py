@@ -19,10 +19,12 @@ def run(cfg):
     if cfg.config['sweep']:
         name = None
         id = None
+
     wandb.init(project="implicit3dunderstanding", config=cfg.config, dir=cfg.config['log']['path'],
                name=name, id=id, resume=resume)
     wandb.summary['pid'] = os.getpid()
     wandb.summary['ppid'] = os.getppid()
+
     # if cfg.config != dict(wandb.config):
     #     cfg.log_string('Updating configurations from wandb.')
     #     cfg.config.update(wandb.config)
