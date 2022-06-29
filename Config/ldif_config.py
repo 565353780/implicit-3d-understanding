@@ -11,7 +11,7 @@ DATA = {
 }
 
 MODEL = {
-    'model_save_path': './out/ldif/22062721592286/',
+    #  'model_save_path': './out/ldif/22062721592286/',
     'bottleneck_size': 1536,
     'element_count': 32,
     'sym_element_count': 16,
@@ -22,6 +22,14 @@ MODEL = {
     'inside_box_loss_weight': 10.0,
 }
 
+OPTIMIZER = {
+    'method': 'Adam',
+    'lr': 2e-4,
+    'betas': [0.9, 0.999],
+    'eps': 1e-08,
+    'weight_decay': 0.0,
+}
+
 LOG = {
     'path': './out/ldif/',
 }
@@ -30,6 +38,7 @@ LDIF_CONFIG = {
     'device': DEVICE,
     'data': DATA,
     'model': MODEL,
+    'optimizer': OPTIMIZER,
     'log': LOG,
 }
 
