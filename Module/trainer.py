@@ -21,12 +21,13 @@ class Trainer(object):
         self.train_dataloader = None
         self.test_dataloader = None
         self.model = None
+        self.optimizer = None
         return
 
     def loadConfig(self, config):
         self.config = config
 
-        parser = argparse.ArgumentParser('test1.')
+        parser = argparse.ArgumentParser('test_parser.')
         parser.add_argument('--config', type=str, default='configs/ldif.yaml')
         parser.add_argument('--mode', type=str, default='train')
         self.cfg = CONFIG(parser)
@@ -34,7 +35,7 @@ class Trainer(object):
 
     def initWandb(self):
         resume = True
-        name = "test_Trainer"
+        name = "test_train"
         id = self.config['log']['path'].split('/')[-2]
 
         wandb.init(project="LDIF_Train",
@@ -56,16 +57,21 @@ class Trainer(object):
         return True
 
     def loadModel(self, model):
-        self.model = model(self.cfg).to(self.device)
+        self.model = model(self.cfg)
 
         model_path = getModelPath(self.config)
         if model_path is None:
             print("[INFO][Trainer::loadModel]")
             print("\t trained model not found, start training from 0 epoch...")
-            return True
+        else:
+            state_dict = torch.load(model_path)
+            self.model.load_state_dict(state_dict)
 
-        state_dict = torch.load(model_path)
-        self.model.load_state_dict(state_dict)
+        self.model.to(self.device)
+        wandb.watch(self.model, log=None)
+        return True
+
+    def loadOptimizer(self):
         return True
 
     def initEnv(self, config, dataloader, model):
