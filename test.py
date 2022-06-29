@@ -10,6 +10,12 @@ import wandb
 
 
 def run(cfg):
+    if 'resume_id' in cfg.config.keys():
+        resume_id = cfg.config['resume_id']
+        resume_path = os.path.join('out/ldif',
+                                   resume_id,
+                                   'model_best.pth')
+        cfg.update_config(mode='test',resume=True, weight=resume_path)
     if wandb.run is None:
         resume = cfg.config['resume']
         name = cfg.config['name']
