@@ -27,8 +27,10 @@ class LDIF(BaseNetwork):
             self.add_module(phase_name, subnet)
 
             '''load corresponding loss functions'''
-            setattr(self, phase_name + '_loss', LOSSES.get(self.cfg.config['model'][phase_name]['loss'], 'Null')(
-                self.cfg.config['model'][phase_name].get('weight', 1), cfg.config))
+            setattr(self,
+                    phase_name + '_loss',
+                    LOSSES.get(self.cfg.config['model'][phase_name]['loss'], 'Null')(
+                        self.cfg.config['model'][phase_name].get('weight', 1), cfg.config))
 
         '''Multi-GPU setting'''
         self.mesh_reconstruction = nn.DataParallel(self.mesh_reconstruction)
