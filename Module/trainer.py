@@ -17,10 +17,10 @@ from Method.models import LDIF
 class Trainer(object):
     def __init__(self):
         self.config = {}
-        self.checkpoint = None
         self.device = None
         self.train_dataloader = None
         self.test_dataloader = None
+        self.model = None
         return
 
     def loadConfig(self, config):
@@ -56,14 +56,16 @@ class Trainer(object):
         return True
 
     def loadModel(self, model):
-        model_path = getModelPath(self.config)
+        self.model = model(self.cfg).to(self.device)
 
+        model_path = getModelPath(self.config)
         if model_path is None:
             print("[INFO][Trainer::loadModel]")
             print("\t trained model not found, start training from 0 epoch...")
             return True
 
-        self.net = model(self.cfg).to(self.device)
+        state_dict = torch.load(model_path)
+        self.model.load_state_dict(state_dict)
         return True
 
     def initEnv(self, config, dataloader, model):

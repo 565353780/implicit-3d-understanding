@@ -7,6 +7,8 @@ from torch import nn
 
 from models.registers import MODULES, LOSSES
 
+from Config.ldif_config import TEMP
+
 from Method.base_model import BaseNetwork
 
 class LDIF(BaseNetwork):
@@ -19,25 +21,15 @@ class LDIF(BaseNetwork):
         super(BaseNetwork, self).__init__()
         self.cfg = cfg
 
-        '''load network blocks'''
-        for phase_name, net_spec in cfg.config['model'].items():
-            method_name = net_spec['method']
-            # load specific optimizer parameters
-            optim_spec = self.load_optim_spec(cfg.config, net_spec)
-            subnet = MODULES.get(method_name)(cfg, optim_spec)
-            self.add_module(phase_name, subnet)
-
-            '''load corresponding loss functions'''
-            setattr(self,
-                    phase_name + '_loss',
-                    LOSSES.get(self.cfg.config['model'][phase_name]['loss'], 'Null')(
-                        self.cfg.config['model'][phase_name].get('weight', 1), cfg.config))
-
-        '''Multi-GPU setting'''
+        optim_spec = self.load_optim_spec(cfg.config, TEMP)
+        self.mesh_reconstruction = MODULES.get('LDIF')(cfg, optim_spec)
         self.mesh_reconstruction = nn.DataParallel(self.mesh_reconstruction)
+
+        self.mesh_reconstruction_loss = LOSSES.get('LDIFLoss', 'Null')(1, cfg.config)
 
         '''freeze submodules or not'''
         self.freeze_modules(cfg)
+        return
 
     def forward(self, data):
         if 'uniform_samples' in data.keys():
