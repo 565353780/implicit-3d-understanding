@@ -13,6 +13,7 @@ from Config.configs import LDIF_CONFIG
 from Method.paths import getModelPath
 from Method.dataloaders import LDIF_dataloader
 from Method.models import LDIF
+from Method.optimizers import load_optimizer
 
 class Trainer(object):
     def __init__(self):
@@ -72,6 +73,7 @@ class Trainer(object):
         return True
 
     def loadOptimizer(self):
+        self.optimizer = load_optimizer(self.config, self.model)
         return True
 
     def initEnv(self, config, dataloader, model):
