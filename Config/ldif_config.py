@@ -30,8 +30,36 @@ OPTIMIZER = {
     'weight_decay': 0.0,
 }
 
+SCHEDULER = {
+    'patience': 50,
+    'factor': 0.5,
+    'threshold': 0.002,
+}
+
+TRAIN = {
+    'epochs': 40000,
+    'phase': 'all',
+    'freeze': [],
+    'batch_size': 24,
+}
+
+VAL = {
+    'phase': 'all',
+    'batch_size': 24,
+}
+
+TEST = {
+    'phase': 'all',
+    'batch_size': 1,
+}
+
 LOG = {
+    'vis_path': 'visualization',
+    'save_results': True,
+    'vis_step': 100,
+    'print_step': 50,
     'path': './out/ldif/',
+    'save_checkpoint': True,
 }
 
 LDIF_CONFIG = {
@@ -39,6 +67,10 @@ LDIF_CONFIG = {
     'data': DATA,
     'model': MODEL,
     'optimizer': OPTIMIZER,
+    'scheduler': SCHEDULER,
+    'train': TRAIN,
+    'val': VAL,
+    'test': TEST,
     'log': LOG,
 }
 
