@@ -33,18 +33,28 @@ class Trainer(object):
     def loadConfig(self, config):
         self.config = config
 
+        if 'resume_path' in self.config['log'].keys():
+            resume_path = self.config['log']['resume_path']
+            if resume_path[-1] != "/":
+                self.config['log']['resume_path'] += "/"
+
+        if 'path' in self.config['log'].keys():
+            path = self.config['log']['path']
+            if path[-1] != "/":
+                self.config['log']['path'] += "/"
+            os.makedirs(path, exist_ok=True)
+
         parser = argparse.ArgumentParser('test_parser.')
         parser.add_argument('--config', type=str, default='configs/ldif.yaml')
         parser.add_argument('--mode', type=str, default='train')
         self.cfg = CONFIG(parser)
         return True
 
-    def initWandb(self):
+    def initWandb(self, project, name):
         resume = True
-        name = "test_train"
         id = self.config['log']['path'].split('/')[-2]
 
-        wandb.init(project="LDIF_Train",
+        wandb.init(project=project,
                    config=self.config,
                    dir=self.config['log']['path'],
                    name=name, id=id, resume=resume)
@@ -58,8 +68,8 @@ class Trainer(object):
         return True
 
     def loadDataset(self, dataloader):
-        self.train_dataloader = dataloader(self.cfg.config, 'train')
-        self.test_dataloader = dataloader(self.cfg.config, 'val')
+        self.train_dataloader = dataloader(self.config, 'train')
+        self.test_dataloader = dataloader(self.config, 'val')
         return True
 
     def loadModel(self, model):
@@ -82,12 +92,12 @@ class Trainer(object):
         self.scheduler = load_scheduler(self.config, self.optimizer)
         return True
 
-    def initEnv(self, config, dataloader, model):
+    def initEnv(self, config, project, name, dataloader, model):
         if not self.loadConfig(config):
             print("[ERROR][Trainer::initEnv]")
             print("\t loadConfig failed!")
             return False
-        if not self.initWandb():
+        if not self.initWandb(project, name):
             print("[ERROR][Trainer::initEnv]")
             print("\t initWandb failed!")
             return False
@@ -102,6 +112,10 @@ class Trainer(object):
         if not self.loadModel(model):
             print("[ERROR][Trainer::initEnv]")
             print("\t loadModel failed!")
+            return False
+        if not self.loadOptimizer():
+            print("[ERROR][Trainer::initEnv]")
+            print("\t loadOptimizer failed!")
             return False
         return True
 
@@ -140,7 +154,7 @@ class Trainer(object):
 
     def show_lr(self):
         lrs = [self.optimizer.param_groups[i]['lr'] for i in range(len(self.optimizer.param_groups))]
-        self.cfg.log_string('Current learning rates are: ' + str(lrs) + '.')
+        print('Current learning rates are: ' + str(lrs) + '.')
         return True
 
     def save(self, suffix=None, **kwargs):
@@ -160,28 +174,22 @@ class Trainer(object):
             filename = 'model_last.pth'
         else:
             filename = 'model_last.pth'.replace('last', suffix)
-        torch.save(outdict, os.path.join(self.cfg.config['log']['path'], filename))
+        save_path = self.config['model']['save_path'] + filename
+        torch.save(outdict, save_path)
         return True
 
-    def train_epoch(self, cfg, epoch, dataloaders, step):
-        '''
-        train by epoch
-        :param cfg: configuration file
-        :param epoch: epoch id.
-        :param dataloaders: dataloader for training and validation
-        :return:
-        '''
+    def train_epoch(self, epoch, dataloaders, step):
         for phase in ['train', 'val']:
             dataloader = dataloaders[phase]
-            batch_size = cfg.config[phase]['batch_size']
+            batch_size = self.config[phase]['batch_size']
             loss_recorder = LossRecorder(batch_size)
             # set mode
             self.model.train(phase == 'train')
             # set subnet mode
             self.model.set_mode()
-            cfg.log_string('-' * 100)
-            cfg.log_string('Switch Phase to %s.' % (phase))
-            cfg.log_string('-'*100)
+            print('-' * 10)
+            print('Switch Phase to %s.' % (phase))
+            print('-'*10)
             eta_calc = ETA(smooth=0.99, ignore_first=True)
             for iter, data in enumerate(dataloader):
                 if phase == 'train':
@@ -192,10 +200,10 @@ class Trainer(object):
                 loss_recorder.update_loss(loss)
 
                 eta = eta_calc(len(dataloader) - iter - 1)
-                if ((iter + 1) % cfg.config['log']['print_step']) == 0:
+                if ((iter + 1) % self.config['log']['print_step']) == 0:
                     pretty_loss = [f'{k}: {v:.3f}' for k, v in loss.items()]
-                    cfg.log_string('Process: Phase: %s. Epoch %d: %d/%d. ETA: %s. Current loss: {%s}.'
-                                   % (phase, epoch, iter + 1, len(dataloader), eta, ', '.join(pretty_loss)))
+                    print('Process: Phase: %s. Epoch %d: %d/%d. ETA: %s. Current loss: {%s}.'
+                          % (phase, epoch, iter + 1, len(dataloader), eta, ', '.join(pretty_loss)))
                     wandb.summary['ETA_stage'] = str(eta)
                     if phase == 'train':
                         loss = {f'train_{k}': v for k, v in loss.items()}
@@ -205,38 +213,37 @@ class Trainer(object):
                 if phase == 'train':
                     step += 1
 
-            cfg.log_string('=' * 100)
+            print('=' * 10)
             for loss_name, loss_value in loss_recorder.loss_recorder.items():
-                cfg.log_string('Currently the last %s loss (%s) is: %f' % (phase, loss_name, loss_value.avg))
-            cfg.log_string('=' * 100)
-
+                print('Currently the last %s loss (%s) is: %f' % (phase, loss_name, loss_value.avg))
+            print('=' * 10)
         return loss_recorder.loss_recorder, step
 
-    def start_train(self, cfg, scheduler, checkpoint, train_loader, val_loader):
+    def start_train(self):
         min_eval_loss = 1e8
         epoch = 0
         step = 0
 
-        start_epoch = scheduler.last_epoch
-        if isinstance(scheduler, (lr_scheduler.StepLR, lr_scheduler.MultiStepLR)):
+        start_epoch = self.scheduler.last_epoch
+        if isinstance(self.scheduler, (lr_scheduler.StepLR, lr_scheduler.MultiStepLR)):
             start_epoch -= 1
         total_epochs = self.config['train']['epochs']
 
-        dataloaders = {'train': train_loader, 'val': val_loader}
+        dataloaders = {'train': self.train_dataloader, 'val': self.test_dataloader}
 
         eta_calc = ETA(smooth=0)
         for epoch in range(start_epoch, total_epochs):
-            self.cfg.log_string('-' * 100)
-            self.cfg.log_string('Epoch (%d/%s):' % (epoch + 1, total_epochs))
+            print('-' * 10)
+            print('Epoch (%d/%s):' % (epoch + 1, total_epochs))
             self.show_lr()
 
-            eval_loss_recorder, step = self.train_epoch(self.cfg, epoch + 1, dataloaders, step)
+            eval_loss_recorder, step = self.train_epoch(epoch + 1, dataloaders, step)
 
-            eval_loss = eval_loss_recorder.avg
-            if isinstance(scheduler, lr_scheduler.ReduceLROnPlateau):
-                scheduler.step(eval_loss)
-            elif isinstance(scheduler, (lr_scheduler.StepLR, lr_scheduler.MultiStepLR)):
-                scheduler.step()
+            eval_loss = eval_loss_recorder['total'].avg
+            if isinstance(self.scheduler, lr_scheduler.ReduceLROnPlateau):
+                self.scheduler.step(eval_loss)
+            elif isinstance(self.scheduler, (lr_scheduler.StepLR, lr_scheduler.MultiStepLR)):
+                self.scheduler.step()
             else:
                 raise NotImplementedError
             loss = {f'test_{k}': v.avg for k, v in eval_loss_recorder.items()}
@@ -245,23 +252,23 @@ class Trainer(object):
             wandb.log({'epoch': epoch + 1}, step=step)
 
             eta = eta_calc(total_epochs - epoch - 1)
-            self.cfg.log_string('Epoch (%d/%s) ETA: (%s).' % (epoch + 1, total_epochs, eta))
+            print('Epoch (%d/%s) ETA: (%s).' % (epoch + 1, total_epochs, eta))
             wandb.summary['ETA'] = str(eta)
 
             # save checkpoint
             if self.config['log'].get('save_checkpoint', True):
-                checkpoint.save('last')
-            self.cfg.log_string('Saved the latest checkpoint.')
+                self.save('last')
+            print('Saved the latest checkpoint.')
             if epoch==-1 or eval_loss<min_eval_loss:
-                if cfg.config['log'].get('save_checkpoint', True):
-                    checkpoint.save('best')
+                if self.config['log'].get('save_checkpoint', True):
+                    self.save('best')
                 min_eval_loss = eval_loss
-                cfg.log_string('Saved the best checkpoint.')
-                cfg.log_string('=' * 100)
+                print('Saved the best checkpoint.')
+                print('=' * 10)
                 for loss_name, loss_value in eval_loss_recorder.items():
                     wandb.summary[f'best_test_{loss_name}'] = loss_value.avg
-                    cfg.log_string('Currently the best val loss (%s) is: %f' % (loss_name, loss_value.avg))
-                cfg.log_string('=' * 100)
+                    print('Currently the best val loss (%s) is: %f' % (loss_name, loss_value.avg))
+                print('=' * 10)
         return True
 
     def train(self):
@@ -275,11 +282,13 @@ class Trainer(object):
 
 def demo():
     config = LDIF_CONFIG
+    project = "LDIF_Train"
+    name = "test1"
     dataloader = LDIF_dataloader
     model = LDIF
 
     trainer = Trainer()
-    trainer.initEnv(config, dataloader, model)
+    trainer.initEnv(config, project, name, dataloader, model)
     trainer.train()
     return True
 
