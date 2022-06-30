@@ -100,3 +100,4 @@ class BaseNetwork(nn.Module):
         ''' calculate losses.
         '''
         raise NotImplementedError
+
