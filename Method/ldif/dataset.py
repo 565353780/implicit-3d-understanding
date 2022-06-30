@@ -50,8 +50,7 @@ class PIX3DLDIF(Dataset):
             info['uniform_points_path'] = os.path.join(rel_folder, 'uniform_points.sdf')
             info['coarse_grid_path'] = os.path.join(rel_folder, 'coarse_grid.grd')
             info['occnet2gaps_path'] = os.path.join(rel_folder, 'orig_to_gaps.txt')
-            watertight = self.config['data'].get('watertight',
-                                                 self.config['model']['mesh_reconstruction']['method'] == 'LDIF')
+            watertight = self.config['data'].get('watertight', self.config['model']['method'] == 'LDIF')
             info['mesh_path'] = os.path.join(rel_folder, 'mesh_orig.ply' if watertight else 'mesh_normalized.ply')
             ext_mgnet = 'mgn' if watertight else 'org'
             info['gt_3dpoints_path'] = os.path.join(rel_folder, f'gt_3dpoints.{ext_mgnet}')
@@ -104,7 +103,7 @@ class LDIF_Dataset(PIX3DLDIF):
         cls_codes[sample_info['class_id']] = 1
         sample['cls'] = cls_codes
 
-        if self.config['model']['mesh_reconstruction']['method'] == 'LDIF':
+        if self.config['model']['method'] == 'LDIF':
             if self.mode == 'test':
                 sample['mesh'] = file_util.read_mesh(sample_info['mesh_path'])
                 occnet2gaps = file_util.read_txt_to_np(sample_info['occnet2gaps_path'])
@@ -130,7 +129,7 @@ class LDIF_Dataset(PIX3DLDIF):
                 # from external.PIFu.lib import sample_util
                 # sample_util.save_samples_truncted_prob('near_surface_samples.ply', sample['near_surface_samples'], sample['near_surface_class'])
                 # sample_util.save_samples_truncted_prob('uniform_samples.ply', sample['uniform_samples'], sample['uniform_class'])
-        elif self.config['model']['mesh_reconstruction']['method'] == 'DensTMNet':
+        elif self.config['model']['method'] == 'DensTMNet':
             sample['sequence_id'] = sample_info['sample_id']
             sample['mesh_points'] = np.fromfile(
                 sample_info['gt_3dpoints_path'], dtype=np.float).reshape(-1, 3).astype(np.float32)
