@@ -3,15 +3,24 @@
 
 DEVICE = {
     'device': 'cuda',
+    'num_workers': 8,
 }
 
 DATA = {
-    'num_workers': 8,
     'batch_size': 24,
+    'dataset': 'pix3d',
+    'split': 'data/pix3d/splits',
+    'random_nomask': 0.0,
+    'watertight': True,
+    'near_surface_samples': 1024,
+    'uniform_samples': 1024,
+    'bounding_box': 0.7,
+    'coarse_grid_spacing': 0.04375,
+    'marching_cube_resolution': 256,
 }
 
 MODEL = {
-    #  'model_save_path': './out/ldif/22062721592286/',
+    'method': 'LDIF',
     'bottleneck_size': 1536,
     'element_count': 32,
     'sym_element_count': 16,
@@ -58,8 +67,9 @@ LOG = {
     'save_results': True,
     'vis_step': 100,
     'print_step': 50,
-    'path': './out/ldif/',
     'save_checkpoint': True,
+    #  'resume_path': './out/ldif/22062721592286/',
+    'path': './out/ldif/test1/',
 }
 
 LDIF_CONFIG = {
