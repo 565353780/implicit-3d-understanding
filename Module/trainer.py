@@ -174,7 +174,7 @@ class Trainer(object):
             filename = 'model_last.pth'
         else:
             filename = 'model_last.pth'.replace('last', suffix)
-        save_path = self.config['model']['save_path'] + filename
+        save_path = self.config['log']['path'] + filename
         torch.save(outdict, save_path)
         return True
 
