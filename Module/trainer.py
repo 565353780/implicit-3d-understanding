@@ -73,7 +73,7 @@ class Trainer(object):
         return True
 
     def loadModel(self, model):
-        self.model = model(self.cfg)
+        self.model = model(self.config, 'train')
 
         model_path = getModelPath(self.config)
         if model_path is None:
