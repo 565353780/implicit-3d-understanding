@@ -4,47 +4,31 @@
 import torch
 
 def has_optim_in_children(subnet):
-    '''
-    check if there is specific optim parameters in a subnet.
-    :param subnet:
-    :return:
-    '''
-    label = False
     for module in subnet.children():
         if hasattr(module, 'optim_spec') and module.optim_spec:
-            label = True
-            break
-        else:
-            label = has_optim_in_children(module)
-    return label
+            return True
+        if has_optim_in_children(module):
+            return True
+    return False
 
 def find_optim_module(net):
-    '''
-    classify modules in a net into has specific optim specs or not.
-    :param net:
-    :return:
-    '''
     module_optim_pairs = []
     other_modules = []
     for module in net.children():
         if hasattr(module, 'optim_spec'):
             module_optim_pairs += [{'module':module, 'optim_spec':module.optim_spec}]
-        elif not has_optim_in_children(module):
-            other_modules += [module]
-        else:
-            module_optim_pairs += find_optim_module(module)[0]
-            other_modules += find_optim_module(module)[1]
+            continue
 
+        if not has_optim_in_children(module):
+            other_modules += [module]
+            continue
+
+        child_module_optim_pairs, child_other_modules = find_optim_module(module)
+        module_optim_pairs += child_module_optim_pairs
+        other_modules += child_other_modules
     return module_optim_pairs, other_modules
 
 def load_optimizer(config, net):
-    '''
-    get optimizer for networks
-    :param config: configuration file
-    :param model: nn.Module network
-    :return:
-    '''
-
     module_optim_pairs, other_modules = find_optim_module(net)
     default_optim_spec = config['optimizer']
 
@@ -90,12 +74,6 @@ def load_optimizer(config, net):
     return optimizer
 
 def load_scheduler(config, optimizer):
-    '''
-    get scheduler for optimizer.
-    :param config: configuration file
-    :param optimizer: torch optimizer
-    :return:
-    '''
     scheduler_dict = config['scheduler']
 
     method = scheduler_dict.get('method', 'ReduceLROnPlateau')
