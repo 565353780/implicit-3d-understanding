@@ -5,12 +5,10 @@ import os
 import torch
 import wandb
 
-import argparse
-
+import torch
+from datetime import datetime, timedelta
+from collections import defaultdict
 from torch.optim import lr_scheduler
-
-from configs.config_utils import CONFIG
-from net_utils.utils import LossRecorder, ETA
 
 from Config.configs import LDIF_CONFIG
 
@@ -18,6 +16,81 @@ from Method.paths import getModelPath
 from Method.dataloaders import LDIF_dataloader
 from Method.models import LDIF
 from Method.optimizers import load_optimizer, load_scheduler
+
+class AverageMeter(object):
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = []
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+        self.cls = defaultdict(AverageMeter)
+
+    def update(self, val, n=1, class_name=None):
+        if not isinstance(val, list):
+            self.sum += val * n # accumulated sum, n = batch_size
+            self.count += n # accumulated count
+            self.val += [val] * n  # history value
+        else:
+            self.sum += sum(val)
+            self.count += len(val)
+            self.val += val
+        self.avg = self.sum / self.count  # current average value
+        if class_name is not None and isinstance(val, list):
+            for k, v in zip(class_name, val):
+                self.cls[k].update(v, class_name=k)
+
+class LossRecorder(object):
+    def __init__(self, batch_size=1):
+        '''
+        Log loss data
+        :param config: configuration file.
+        :param phase: train, validation or test.
+        '''
+        self._batch_size = batch_size
+        self._loss_recorder = {}
+
+    @property
+    def batch_size(self):
+        return self._batch_size
+
+    @property
+    def loss_recorder(self):
+        return self._loss_recorder
+
+    def update_loss(self, loss_dict, class_name=None):
+        for key, item in loss_dict.items():
+            if key not in self._loss_recorder:
+                self._loss_recorder[key] = AverageMeter()
+            self._loss_recorder[key].update(item, self._batch_size, class_name)
+
+class ETA:
+    def __init__(self, smooth=0.99, ignore_first=False):
+        self.tic = datetime.now()
+        self.smooth = smooth
+        self.ignore_first=ignore_first
+        self.speed = 0
+        self.eta = None
+
+    def __call__(self, left_steps):
+        toc = datetime.now()
+        if self.ignore_first:
+            self.ignore_first = False
+            self.tic = toc
+            return None
+        else:
+            if self.speed > 0:
+                speed = self.smooth * timedelta(seconds=self.speed) + \
+                    (1 - self.smooth) * (toc - self.tic)
+            else:
+                speed = toc - self.tic
+            self.tic = toc
+            eta = speed * left_steps
+            self.eta = timedelta(seconds=round(eta.total_seconds()))
+            self.speed = speed.total_seconds()
+            return self.eta
 
 class Trainer(object):
     def __init__(self):
@@ -33,31 +106,33 @@ class Trainer(object):
     def loadConfig(self, config):
         self.config = config
 
-        if 'resume_path' in self.config['log'].keys():
-            resume_path = self.config['log']['resume_path']
+        log_dict = self.config['log']
+        if 'resume_path' in log_dict.keys():
+            resume_path = log_dict['resume_path']
             if resume_path[-1] != "/":
                 self.config['log']['resume_path'] += "/"
 
-        if 'path' in self.config['log'].keys():
-            path = self.config['log']['path']
+        if 'path' in log_dict.keys():
+            path = log_dict['path']
             if path[-1] != "/":
                 self.config['log']['path'] += "/"
             os.makedirs(path, exist_ok=True)
-
-        parser = argparse.ArgumentParser('test_parser.')
-        parser.add_argument('--config', type=str, default='configs/ldif.yaml')
-        parser.add_argument('--mode', type=str, default='train')
-        self.cfg = CONFIG(parser)
+            name = log_dict['name']
+            log_save_path = path + name + "/"
+            os.makedirs(log_save_path, exist_ok=True)
         return True
 
-    def initWandb(self, project, name):
+    def initWandb(self):
         resume = True
-        id = self.config['log']['path'].split('/')[-2]
+        log_dict = self.config['log']
 
-        wandb.init(project=project,
+        id = log_dict['path'].split('/')[-2]
+
+        wandb.init(project=log_dict['project'],
                    config=self.config,
-                   dir=self.config['log']['path'],
-                   name=name, id=id, resume=resume)
+                   dir=log_dict['path'] + log_dict['name'] + "/",
+                   name=log_dict['name'],
+                   id=id, resume=resume)
         wandb.summary['pid'] = os.getpid()
         wandb.summary['ppid'] = os.getppid()
         return True
@@ -81,7 +156,7 @@ class Trainer(object):
             print("\t trained model not found, start training from 0 epoch...")
         else:
             state_dict = torch.load(model_path)
-            self.model.load_state_dict(state_dict)
+            #  self.model.load_state_dict(state_dict)
 
         self.model.to(self.device)
         wandb.watch(self.model, log=None)
@@ -92,12 +167,12 @@ class Trainer(object):
         self.scheduler = load_scheduler(self.config, self.optimizer)
         return True
 
-    def initEnv(self, config, project, name, dataloader, model):
+    def initEnv(self, config, dataloader, model):
         if not self.loadConfig(config):
             print("[ERROR][Trainer::initEnv]")
             print("\t loadConfig failed!")
             return False
-        if not self.initWandb(project, name):
+        if not self.initWandb():
             print("[ERROR][Trainer::initEnv]")
             print("\t initWandb failed!")
             return False
@@ -157,18 +232,22 @@ class Trainer(object):
         print('Current learning rates are: ' + str(lrs) + '.')
         return True
 
-    def save(self, suffix=None, **kwargs):
-        '''
-        save the current module dictionary.
-        :param kwargs:
-        :return:
-        '''
-        outdict = kwargs
+    def save(self, suffix=None):
+        print("start save")
+        outdict = {}
         for k, v in self.config.items():
             if hasattr(v, 'state_dict'):
+                print("====")
+                print("====")
+                print(k)
+                print("====")
+                print(v)
+                print("====")
+                print("====")
                 outdict[k] = v.state_dict()
             else:
                 outdict[k] = v
+        print("end save")
 
         if not suffix:
             filename = 'model_last.pth'
@@ -183,9 +262,7 @@ class Trainer(object):
             dataloader = dataloaders[phase]
             batch_size = self.config[phase]['batch_size']
             loss_recorder = LossRecorder(batch_size)
-            # set mode
             self.model.train(phase == 'train')
-            # set subnet mode
             self.model.set_mode()
             print('-' * 10)
             print('Switch Phase to %s.' % (phase))
@@ -282,13 +359,11 @@ class Trainer(object):
 
 def demo():
     config = LDIF_CONFIG
-    project = "LDIF_Train"
-    name = "test1"
     dataloader = LDIF_dataloader
     model = LDIF
 
     trainer = Trainer()
-    trainer.initEnv(config, project, name, dataloader, model)
+    trainer.initEnv(config, dataloader, model)
     trainer.train()
     return True
 
