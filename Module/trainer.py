@@ -2,12 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import os
-import torch
 import wandb
-
 import torch
-from datetime import datetime, timedelta
-from collections import defaultdict
 from torch.optim import lr_scheduler
 
 from Config.configs import LDIF_CONFIG
