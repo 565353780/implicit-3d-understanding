@@ -63,13 +63,15 @@ TEST = {
 }
 
 LOG = {
+    'project': 'LDIF_Train',
+    'name': 'test2',
     'vis_path': 'visualization',
     'save_results': True,
     'vis_step': 100,
     'print_step': 50,
     'save_checkpoint': True,
-    'resume_path': './out/ldif/test1/',
-    'path': './out/ldif/test1/',
+    'resume_path': './out/ldif/',
+    'path': './out/ldif/',
 }
 
 LDIF_CONFIG = {
