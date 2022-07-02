@@ -11,7 +11,13 @@ def getModelPath(config):
     model_resume_path = log_dict['resume_path']
     if model_resume_path[-1] != "/":
         model_resume_path += "/"
-    last_model_path = model_resume_path + "model_last.pth"
+
+    name = log_dict['name']
+    model_save_path = model_resume_path + name + "/"
+    if not os.path.exists(model_save_path):
+        return None
+
+    last_model_path = model_save_path + "model_last.pth"
     if not os.path.exists(last_model_path):
         return None
     return last_model_path
