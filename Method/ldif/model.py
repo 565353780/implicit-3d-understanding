@@ -27,7 +27,6 @@ from Method.ldif.loss import LDIFLoss
 
 def sample_quadric_surface(quadric, center, samples):
     # Sample the quadric surfaces and the RBFs in world space, and composite them.
-    # (ldif.representation.quadrics.sample_quadric_surface)
     samples = samples - center.unsqueeze(2)
     homogeneous_sample_coords = F.pad(samples, [0, 1], "constant", 1)
     half_distance = torch.matmul(quadric, homogeneous_sample_coords.transpose(-1, -2))
@@ -37,7 +36,6 @@ def sample_quadric_surface(quadric, center, samples):
 
 def decode_covariance_roll_pitch_yaw(radius, invert=False):
     # Converts 6-D radus vectors to the corresponding covariance matrices.
-    # (ldif.representation.quadrics.decode_covariance_roll_pitch_yaw
     d = 1.0 / (radius[..., :3] + 1e-8) if invert else radius[..., :3]
     diag = torch.diag_embed(d)
     rotation = camera_util.roll_pitch_yaw_to_rotation_matrices(radius[..., 3:6])
@@ -45,7 +43,6 @@ def decode_covariance_roll_pitch_yaw(radius, invert=False):
 
 def sample_cov_bf(center, radius, samples):
     # Samples gaussian radial basis functions at specified coordinates.
-    # (ldif.representation.quadrics.sample_cov_bf)
     diff = samples - center.unsqueeze(2)
     x, y, z = diff.unbind(-1)
 
@@ -59,7 +56,7 @@ def sample_cov_bf(center, radius, samples):
     return dist.unsqueeze(-1)
 
 def compute_shape_element_influences(quadrics, centers, radii, samples):
-    # compute shape element influences (ldif.representation.quadrics.compute_shape_element_influences)
+    # compute shape element influences
     sampled_quadrics = sample_quadric_surface(quadrics, centers, samples)
     sampled_rbfs = sample_cov_bf(centers, radii, samples)
     return sampled_quadrics, sampled_rbfs
@@ -75,7 +72,6 @@ def _unflatten(config, vector):
 
 class StructuredImplicit(object):
     def __init__(self, config, constant, center, radius, iparam, net=None):
-        # (ldif.representation.structured_implicit_function.StructuredImplicit.from_activation)
         self.config = config
         self.implicit_parameter_length = config['model']['implicit_parameter_length']
         self.element_count = config['model']['element_count']
@@ -114,7 +110,6 @@ class StructuredImplicit(object):
 
     def _tile_for_symgroups(self, elements):
         # Tiles an input tensor along its element dimension based on symmetry
-        # (ldif.representation.structured_implicit_function._tile_for_symgroups)
         sym_elements = elements[:, :self.sym_element_count, ...]
         elements = torch.cat([elements, sym_elements], 1)
         return elements
@@ -158,7 +153,6 @@ class StructuredImplicit(object):
         return self._all_centers
 
     def class_at_samples(self, samples, apply_class_transfer=True):
-        # (ldif.representation.structured_implicit_function.StructuredImplicit.class_at_samples)
         effective_constants = self._tile_for_symgroups(self.constants)
         effective_centers = self._tile_for_symgroups(self.centers)
         effective_radii = self._tile_for_symgroups(self.radii)
@@ -416,8 +410,8 @@ class LDIF_SubNet(nn.Module):
         if isinstance(structured_implicit, dict):
             structured_implicit = StructuredImplicit(config=self.config, **structured_implicit, net=self)
         elif structured_implicit is None or isinstance(structured_implicit, bool):
-            # encoder (ldif.model.model.StructuredImplicitModel.forward)
-            # image encoding (ldif.nets.cnn.early_fusion_cnn)
+            # encoder
+            # image encoding
             embedding = self.encoder(image)
             return_dict['ldif_afeature'] = embedding
             embedding = torch.cat([embedding, size_cls], 1)
@@ -526,21 +520,6 @@ class LDIF(nn.Module):
                 if m._get_name().find('BatchNorm') != -1:
                     m.eval()
         return True
-
-    def load_weight(self, pretrained_model):
-        model_dict = self.state_dict()
-        pretrained_dict = {}
-        for k, v in pretrained_model.items():
-            if k not in model_dict:
-                print(f"{k} will not be loaded because not exist in target model")
-            elif model_dict[k].shape != v.shape:
-                print(f"{k} will not be loaded because source shape {model_dict[k].shape} != taget shape {v.shape}")
-            else:
-                pretrained_dict[k] = v
-
-        print(str(set([key.split('.')[0] for key in model_dict if key not in pretrained_dict])) + ' subnet missed.')
-        model_dict.update(pretrained_dict)
-        self.load_state_dict(model_dict)
 
     def load_optim_spec(self):
         if self.mode != 'train':
