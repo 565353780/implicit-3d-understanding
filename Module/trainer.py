@@ -20,64 +20,39 @@ from Method.optimizers import load_optimizer, load_scheduler
 class AverageMeter(object):
     def __init__(self):
         self.reset()
+        return
 
     def reset(self):
         self.val = []
         self.avg = 0
         self.sum = 0
         self.count = 0
-        self.cls = defaultdict(AverageMeter)
+        return True
 
-    def update(self, val, n=1, class_name=None):
+    def update(self, val, n=1):
         if not isinstance(val, list):
-            self.sum += val * n # accumulated sum, n = batch_size
-            self.count += n # accumulated count
-            self.val += [val] * n  # history value
+            self.sum += val * n
+            self.count += n
+            self.val += [val] * n
         else:
             self.sum += sum(val)
             self.count += len(val)
             self.val += val
-        self.avg = self.sum / self.count  # current average value
-        if class_name is not None and isinstance(val, list):
-            for k, v in zip(class_name, val):
-                self.cls[k].update(v, class_name=k)
+        self.avg = self.sum / self.count
+        return True
 
 class LossRecorder(object):
     def __init__(self, batch_size=1):
         self.batch_size = batch_size
         self.loss_recorder = {}
+        return
 
-    def update_loss(self, loss_dict, class_name=None):
+    def update_loss(self, loss_dict):
         for key, item in loss_dict.items():
             if key not in self.loss_recorder:
                 self.loss_recorder[key] = AverageMeter()
-            self.loss_recorder[key].update(item, self.batch_size, class_name)
-
-class ETA:
-    def __init__(self, smooth=0.99, ignore_first=False):
-        self.tic = datetime.now()
-        self.smooth = smooth
-        self.ignore_first=ignore_first
-        self.speed = 0
-        self.eta = None
-
-    def __call__(self, left_steps):
-        toc = datetime.now()
-        if self.ignore_first:
-            self.ignore_first = False
-            self.tic = toc
-            return None
-        else:
-            if self.speed > 0:
-                speed = self.smooth * timedelta(seconds=self.speed) + \
-                    (1 - self.smooth) * (toc - self.tic)
-            else:
-                speed = toc - self.tic
-            self.tic = toc
-            eta = speed * left_steps
-            self.eta = timedelta(seconds=round(eta.total_seconds()))
-            self.speed = speed.total_seconds()
-            return self.eta
+            self.loss_recorder[key].update(item, self.batch_size)
+        return True
 
 class Trainer(object):
     def __init__(self):
@@ -254,7 +229,6 @@ class Trainer(object):
             print('-' * 10)
             print('Switch Phase to %s.' % (phase))
             print('-'*10)
-            eta_calc = ETA(smooth=0.99, ignore_first=True)
             for iter, data in enumerate(dataloader):
                 if phase == 'train':
                     loss = self.train_step(data)
@@ -263,12 +237,11 @@ class Trainer(object):
 
                 loss_recorder.update_loss(loss)
 
-                eta = eta_calc(len(dataloader) - iter - 1)
                 if ((iter + 1) % self.config['log']['print_step']) == 0:
                     pretty_loss = [f'{k}: {v:.3f}' for k, v in loss.items()]
-                    print('Process: Phase: %s. Epoch %d: %d/%d. ETA: %s. Current loss: {%s}.'
-                          % (phase, epoch, iter + 1, len(dataloader), eta, ', '.join(pretty_loss)))
-                    wandb.summary['ETA_stage'] = str(eta)
+                    print('Process: Phase: ' + phase + \
+                          '. Epoch ' + str(epoch) + ': ' + str(iter + 1) + '/' + str(len(dataloader)) + \
+                          '. Current loss: {' + ', '.join(pretty_loss) + '}.')
                     if phase == 'train':
                         loss = {f'train_{k}': v for k, v in loss.items()}
                         wandb.log(loss, step=step)
@@ -295,7 +268,6 @@ class Trainer(object):
 
         dataloaders = {'train': self.train_dataloader, 'val': self.test_dataloader}
 
-        eta_calc = ETA(smooth=0)
         for epoch in range(start_epoch, total_epochs):
             print('-' * 10)
             print('Epoch (%d/%s):' % (epoch + 1, total_epochs))
@@ -315,9 +287,7 @@ class Trainer(object):
             wandb.log({f'lr{i}': g['lr'] for i, g in enumerate(self.optimizer.param_groups)}, step=step)
             wandb.log({'epoch': epoch + 1}, step=step)
 
-            eta = eta_calc(total_epochs - epoch - 1)
-            print('Epoch (%d/%s) ETA: (%s).' % (epoch + 1, total_epochs, eta))
-            wandb.summary['ETA'] = str(eta)
+            print('Epoch (' + str(epoch + 1) + '/' + str(total_epochs) + ').')
 
             # save checkpoint
             if self.config['log'].get('save_checkpoint', True):
