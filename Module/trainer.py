@@ -290,11 +290,11 @@ class Trainer(object):
             print('Epoch (' + str(epoch + 1) + '/' + str(total_epochs) + ').')
 
             # save checkpoint
-            if self.config['log'].get('save_checkpoint', True):
+            if self.config['log']['save_checkpoint']:
                 self.save('last')
             print('Saved the latest checkpoint.')
             if epoch==-1 or eval_loss<min_eval_loss:
-                if self.config['log'].get('save_checkpoint', True):
+                if self.config['log']['save_checkpoint']:
                     self.save('best')
                 min_eval_loss = eval_loss
                 print('Saved the best checkpoint.')
@@ -306,13 +306,15 @@ class Trainer(object):
         return True
 
     def train(self):
-        num_params = sum(p.numel() for p in self.model.parameters())
-        print("num_params =")
-        print(num_params)
+        print("num_params =", self.getParamNum())
         wandb.summary['num_params'] = num_params
 
         self.start_train()
         return True
+
+    def getParamNum(self):
+        param_num = sum(p.numel() for p in self.model.parameters())
+        return param_num
 
 def demo():
     config = LDIF_CONFIG
