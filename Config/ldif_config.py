@@ -68,7 +68,7 @@ LOG = {
     'vis_step': 100,
     'print_step': 50,
     'save_checkpoint': True,
-    #  'resume_path': './out/ldif/22062721592286/',
+    'resume_path': './out/ldif/test1/',
     'path': './out/ldif/test1/',
 }
 
@@ -82,18 +82,5 @@ LDIF_CONFIG = {
     'val': VAL,
     'test': TEST,
     'log': LOG,
-}
-
-TEMP = {
-    'method': 'LDIF',
-    'loss': 'LDIFLoss',
-    'bottleneck_size': 1536,
-    'element_count': 32,
-    'sym_element_count': 16,
-    'implicit_parameter_length': 32,
-    'uniform_loss_weight': 1.0,
-    'near_surface_loss_weight': 0.1,
-    'lowres_grid_inside_loss_weight': 0.2,
-    'inside_box_loss_weight': 10.0,
 }
 

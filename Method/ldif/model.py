@@ -14,17 +14,14 @@ import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
 import torch.nn.functional as F
 
-from configs.data_config import number_pnts_on_template, pix3d_n_classes
+from configs.data_config import pix3d_n_classes
 from models.modules import resnet
 from models.modules.resnet import model_urls
-from net_utils.misc import weights_init, sphere_edges, sphere_faces, sphere_edge2face, sphere_adjacency, sphere_points_normals, sample_points_on_edges
+from net_utils.misc import weights_init
 from external.ldif.representation.structured_implicit_function import StructuredImplicit
-from external.ldif.util import np_util
 from external.ldif.inference import extract_mesh
 from external.PIFu.lib import mesh_util
 from external.ldif.util import file_util, camera_util
-
-from Config.ldif_config import TEMP
 
 from Method.ldif.loss import LDIFLoss
 
@@ -488,7 +485,7 @@ class LDIF(nn.Module):
         self.config = config
         self.mode = mode
 
-        optim_spec = self.load_optim_spec(self.config, TEMP)
+        optim_spec = self.load_optim_spec()
         self.mesh_reconstruction = LDIF_SubNet(config, optim_spec)
         self.mesh_reconstruction = nn.DataParallel(self.mesh_reconstruction)
 
@@ -545,17 +542,11 @@ class LDIF(nn.Module):
         model_dict.update(pretrained_dict)
         self.load_state_dict(model_dict)
 
-    def load_optim_spec(self, config, net_spec):
-        # load specific optimizer parameters
-        if self.mode == 'train':
-            if 'optimizer' in net_spec.keys():
-                optim_spec = net_spec['optimizer']
-            else:
-                optim_spec = config['optimizer']  # else load default optimizer
-        else:
-            optim_spec = None
+    def load_optim_spec(self):
+        if self.mode != 'train':
+            return None
 
-        return optim_spec
+        return self.config['optimizer']
 
     def forward(self, data):
         if 'uniform_samples' in data.keys():
