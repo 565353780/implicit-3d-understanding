@@ -44,27 +44,14 @@ class AverageMeter(object):
 
 class LossRecorder(object):
     def __init__(self, batch_size=1):
-        '''
-        Log loss data
-        :param config: configuration file.
-        :param phase: train, validation or test.
-        '''
-        self._batch_size = batch_size
-        self._loss_recorder = {}
-
-    @property
-    def batch_size(self):
-        return self._batch_size
-
-    @property
-    def loss_recorder(self):
-        return self._loss_recorder
+        self.batch_size = batch_size
+        self.loss_recorder = {}
 
     def update_loss(self, loss_dict, class_name=None):
         for key, item in loss_dict.items():
-            if key not in self._loss_recorder:
-                self._loss_recorder[key] = AverageMeter()
-            self._loss_recorder[key].update(item, self._batch_size, class_name)
+            if key not in self.loss_recorder:
+                self.loss_recorder[key] = AverageMeter()
+            self.loss_recorder[key].update(item, self.batch_size, class_name)
 
 class ETA:
     def __init__(self, smooth=0.99, ignore_first=False):
