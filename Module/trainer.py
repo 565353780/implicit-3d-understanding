@@ -70,6 +70,11 @@ class Trainer(object):
         self.test_dataloader = dataloader(self.config, 'val')
         return True
 
+    def loadOptimizer(self):
+        self.optimizer = load_optimizer(self.config, self.model)
+        self.scheduler = load_scheduler(self.config, self.optimizer)
+        return True
+
     def loadModel(self, model):
         self.model = model(self.config, 'train')
 
@@ -79,15 +84,12 @@ class Trainer(object):
             print("\t trained model not found, start training from 0 epoch...")
         else:
             state_dict = torch.load(model_path)
-            #  self.model.load_state_dict(state_dict)
+            self.model.load_state_dict(state_dict['model'])
+            self.optimizer.load_state_dict(state_dict['optimizer'])
+            self.scheduler.load_state_dict(state_dict['scheduler'])
 
         self.model.to(self.device)
         wandb.watch(self.model, log=None)
-        return True
-
-    def loadOptimizer(self):
-        self.optimizer = load_optimizer(self.config, self.model)
-        self.scheduler = load_scheduler(self.config, self.optimizer)
         return True
 
     def initEnv(self, config, dataloader, model):
@@ -107,14 +109,31 @@ class Trainer(object):
             print("[ERROR][Trainer::initEnv]")
             print("\t loadDevice failed!")
             return False
-        if not self.loadModel(model):
-            print("[ERROR][Trainer::initEnv]")
-            print("\t loadModel failed!")
-            return False
         if not self.loadOptimizer():
             print("[ERROR][Trainer::initEnv]")
             print("\t loadOptimizer failed!")
             return False
+        if not self.loadModel(model):
+            print("[ERROR][Trainer::initEnv]")
+            print("\t loadModel failed!")
+            return False
+        return True
+
+    def saveModel(self, suffix=None):
+        save_dict = {
+            'model': self.model.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+            'scheduler': self.scheduler.state_dict(),
+        }
+
+        save_folder = self.config['log']['path'] + self.config['log']['name'] + "/"
+
+        if not suffix:
+            filename = 'model_last.pth'
+        else:
+            filename = 'model_last.pth'.replace('last', suffix)
+        save_path = save_folder + filename
+        torch.save(save_dict, save_path)
         return True
 
     def to_device(self, data):
@@ -129,7 +148,6 @@ class Trainer(object):
 
     def compute_loss(self, data):
         data = self.to_device(data)
-
         est_data = self.model(data)
 
         loss = self.model.loss(est_data, data)
@@ -155,66 +173,64 @@ class Trainer(object):
         print('Current learning rates are: ' + str(lrs) + '.')
         return True
 
-    def save(self, suffix=None):
-        print("start save")
-        outdict = {}
-        for k, v in self.config.items():
-            if hasattr(v, 'state_dict'):
-                print("====")
-                print("====")
-                print(k)
-                print("====")
-                print(v)
-                print("====")
-                print("====")
-                outdict[k] = v.state_dict()
-            else:
-                outdict[k] = v
-        print("end save")
-
-        if not suffix:
-            filename = 'model_last.pth'
-        else:
-            filename = 'model_last.pth'.replace('last', suffix)
-        save_path = self.config['log']['path'] + filename
-        torch.save(outdict, save_path)
+    def outputStep(self, epoch_name, epoch, step, dataset_size, loss):
+        pretty_loss = [f'{k}: {v:.3f}' for k, v in loss.items()]
+        print("[" + epoch_name + "] [Epoch " + str(epoch) + '] ' + \
+              str(step) + '/' + str(len(self.test_dataloader)) + \
+              ' [Loss] {' + ', '.join(pretty_loss) + '}')
         return True
 
-    def train_epoch(self, epoch, dataloaders, step):
-        for phase in ['train', 'val']:
-            dataloader = dataloaders[phase]
-            batch_size = self.config[phase]['batch_size']
-            loss_recorder = LossRecorder(batch_size)
-            self.model.train(phase == 'train')
-            self.model.set_mode()
-            print('-' * 10)
-            print('Switch Phase to %s.' % (phase))
-            print('-'*10)
-            for iter, data in enumerate(dataloader):
-                if phase == 'train':
-                    loss = self.train_step(data)
-                else:
-                    loss = self.eval_step(data)
+    def outputLoss(self, loss_recorder):
+        print("[INFO][Trainer::outputLoss]")
+        for loss_name, loss_value in loss_recorder.loss_recorder.items():
+            print("\t", loss_name, loss_value.avg)
+        print('=' * 10)
+        return True
 
-                loss_recorder.update_loss(loss)
+    def train_epoch(self, epoch, step):
+        batch_size = self.config['train']['batch_size']
+        loss_recorder = LossRecorder(batch_size)
+        self.model.train(True)
+        self.model.set_mode()
 
-                if ((iter + 1) % self.config['log']['print_step']) == 0:
-                    pretty_loss = [f'{k}: {v:.3f}' for k, v in loss.items()]
-                    print('Process: Phase: ' + phase + \
-                          '. Epoch ' + str(epoch) + ': ' + str(iter + 1) + '/' + str(len(dataloader)) + \
-                          '. Current loss: {' + ', '.join(pretty_loss) + '}.')
-                    if phase == 'train':
-                        loss = {f'train_{k}': v for k, v in loss.items()}
-                        wandb.log(loss, step=step)
-                        wandb.log({'epoch': epoch}, step=step)
+        print_step = self.config['log']['print_step']
+        dataset_size = len(self.train_dataloader)
+        for iter, data in enumerate(self.train_dataloader):
+            loss = self.train_step(data)
+            loss_recorder.update_loss(loss)
 
-                if phase == 'train':
-                    step += 1
+            if ((iter + 1) % print_step) != 0:
+                continue
+            self.outputStep(epoch, iter+1, dataset_size, loss)
 
-            print('=' * 10)
-            for loss_name, loss_value in loss_recorder.loss_recorder.items():
-                print('Currently the last %s loss (%s) is: %f' % (phase, loss_name, loss_value.avg))
-            print('=' * 10)
+            loss = {f'train_{k}': v for k, v in loss.items()}
+            wandb.log(loss, step=step)
+            wandb.log({'epoch': epoch}, step=step)
+
+            step += 1
+        self.outputLoss(loss_recorder)
+        return loss_recorder.loss_recorder, step
+
+    def val_epoch(self, epoch, step):
+        batch_size = self.config['val']['batch_size']
+        loss_recorder = LossRecorder(batch_size)
+        self.model.train(False)
+        self.model.set_mode()
+
+        print_step = self.config['log']['print_step']
+        for iter, data in enumerate(self.test_dataloader):
+            loss = self.eval_step(data)
+            loss_recorder.update_loss(loss)
+
+            if ((iter + 1) % print_step) != 0:
+                continue
+
+            pretty_loss = [f'{k}: {v:.3f}' for k, v in loss.items()]
+            print("[INFO][Trainer::val_epoch]")
+            print("\t [VAL] [Epoch" + str(epoch) + '] ' + \
+                  str(iter + 1) + '/' + str(len(self.test_dataloader)) + \
+                  ' [Loss] {' + ', '.join(pretty_loss) + '}')
+        self.outputLoss(loss_recorder)
         return loss_recorder.loss_recorder, step
 
     def start_train(self):
@@ -226,8 +242,6 @@ class Trainer(object):
         if isinstance(self.scheduler, (lr_scheduler.StepLR, lr_scheduler.MultiStepLR)):
             start_epoch -= 1
         total_epochs = self.config['train']['epochs']
-
-        dataloaders = {'train': self.train_dataloader, 'val': self.test_dataloader}
 
         for epoch in range(start_epoch, total_epochs):
             print('-' * 10)
