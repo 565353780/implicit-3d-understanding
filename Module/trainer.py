@@ -267,7 +267,8 @@ class Trainer(object):
         return True
 
     def train(self):
-        print("num_params =", self.getParamNum())
+        num_params = self.getParamNum()
+        print("num_params =", num_params)
         wandb.summary['num_params'] = num_params
 
         self.start_train()
