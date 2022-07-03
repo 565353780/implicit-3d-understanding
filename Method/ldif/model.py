@@ -471,10 +471,6 @@ class LDIF_SubNet(nn.Module):
 class LDIF(nn.Module):
 
     def __init__(self, config, mode):
-        '''
-        load submodules for the network.
-        :param config: customized configurations.
-        '''
         super(LDIF, self).__init__()
         self.config = config
         self.mode = mode
@@ -485,14 +481,10 @@ class LDIF(nn.Module):
 
         self.mesh_reconstruction_loss = LDIFLoss(1, self.config)
 
-        '''freeze submodules or not'''
         self.freeze_modules()
         return
 
     def freeze_modules(self):
-        '''
-        Freeze modules in training
-        '''
         if self.mode == 'train':
             freeze_layers = self.config['train']['freeze']
             for layer in freeze_layers:
@@ -504,11 +496,6 @@ class LDIF(nn.Module):
         return True
 
     def set_mode(self):
-        '''
-        Set train/eval mode for the network.
-        :param phase: train or eval
-        :return:
-        '''
         freeze_layers = self.config['train']['freeze']
         for name, child in self.named_children():
             if name in freeze_layers:

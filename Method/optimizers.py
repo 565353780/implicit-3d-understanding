@@ -56,21 +56,21 @@ def load_optimizer(config, net):
                                      betas=tuple(default_optim_spec['betas']),
                                      eps=float(default_optim_spec['eps']),
                                      weight_decay=float(default_optim_spec['weight_decay']))
+        return optimizer
 
-    else:
-        # use SGD optimizer.
-        for module in module_optim_pairs:
-            optim_params.append({'params': filter(lambda p: p.requires_grad, module['module'].parameters()),
-                                 'lr': float(module['optim_spec']['lr'])})
+    # use SGD optimizer.
+    for module in module_optim_pairs:
+        optim_params.append({'params': filter(lambda p: p.requires_grad, module['module'].parameters()),
+                             'lr': float(module['optim_spec']['lr'])})
 
-        other_params = list()
-        for module in other_modules:
-            other_params += list(module.parameters())
+    other_params = list()
+    for module in other_modules:
+        other_params += list(module.parameters())
 
-        optim_params.append({'params': filter(lambda p: p.requires_grad, other_params)})
-        optimizer = torch.optim.SGD(optim_params,
-                                    lr=config['optimizer']['lr'],
-                                    momentum=0.9)
+    optim_params.append({'params': filter(lambda p: p.requires_grad, other_params)})
+    optimizer = torch.optim.SGD(optim_params,
+                                lr=config['optimizer']['lr'],
+                                momentum=0.9)
     return optimizer
 
 def load_scheduler(config, optimizer):
@@ -84,17 +84,21 @@ def load_scheduler(config, optimizer):
             patience=scheduler_dict['patience'],
             threshold=float(scheduler_dict['threshold']),
             verbose=True)
-    elif method == 'StepLR':
+        return scheduler
+
+    if method == 'StepLR':
         scheduler = torch.optim.lr_scheduler.StepLR(
             optimizer,
             gamma=float(scheduler_dict['gamma']),
             step_size=int(scheduler_dict['step_size']))
-    elif method == 'MultiStepLR':
+        return scheduler
+
+    if method == 'MultiStepLR':
         scheduler = torch.optim.lr_scheduler.MultiStepLR(
             optimizer,
             gamma=float(scheduler_dict['gamma']),
             milestones=scheduler_dict['milestones'])
-    else:
-        raise NotImplementedError
-    return scheduler
+        return scheduler
+
+    raise NotImplementedError
 
