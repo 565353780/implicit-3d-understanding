@@ -120,7 +120,7 @@ class Trainer(object):
             'scheduler': self.scheduler.state_dict(),
         }
 
-        log_dict = self.config['log']['path']
+        log_dict = self.config['log']
         save_folder = log_dict['path'] + log_dict['name'] + "/"
 
         if not suffix:
