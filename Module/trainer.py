@@ -4,6 +4,7 @@
 import os
 import wandb
 import torch
+from tqdm import tqdm
 from torch.optim import lr_scheduler
 
 from Config.configs import LDIF_CONFIG
@@ -70,13 +71,10 @@ class Trainer(object):
         self.test_dataloader = dataloader(self.config, 'val')
         return True
 
-    def loadOptimizer(self):
-        self.optimizer = load_optimizer(self.config, self.model)
-        self.scheduler = load_scheduler(self.config, self.optimizer)
-        return True
-
     def loadModel(self, model):
         self.model = model(self.config, 'train')
+        self.optimizer = load_optimizer(self.config, self.model)
+        self.scheduler = load_scheduler(self.config, self.optimizer)
 
         model_path = getModelPath(self.config)
         if model_path is None:
@@ -108,10 +106,6 @@ class Trainer(object):
         if not self.loadDataset(dataloader):
             print("[ERROR][Trainer::initEnv]")
             print("\t loadDevice failed!")
-            return False
-        if not self.loadOptimizer():
-            print("[ERROR][Trainer::initEnv]")
-            print("\t loadOptimizer failed!")
             return False
         if not self.loadModel(model):
             print("[ERROR][Trainer::initEnv]")
@@ -176,7 +170,7 @@ class Trainer(object):
     def outputStep(self, epoch_name, epoch, step, dataset_size, loss):
         pretty_loss = [f'{k}: {v:.3f}' for k, v in loss.items()]
         print("[" + epoch_name + "] [Epoch " + str(epoch) + '] ' + \
-              str(step) + '/' + str(len(self.test_dataloader)) + \
+              str(step) + '/' + str(dataset_size) + \
               ' [Loss] {' + ', '.join(pretty_loss) + '}')
         return True
 
@@ -201,7 +195,7 @@ class Trainer(object):
 
             if ((iter + 1) % print_step) != 0:
                 continue
-            self.outputStep(epoch, iter+1, dataset_size, loss)
+            self.outputStep("TRAIN", epoch, iter+1, dataset_size, loss)
 
             loss = {f'train_{k}': v for k, v in loss.items()}
             wandb.log(loss, step=step)
@@ -209,29 +203,33 @@ class Trainer(object):
 
             step += 1
         self.outputLoss(loss_recorder)
-        return loss_recorder.loss_recorder, step
+        return step
 
-    def val_epoch(self, epoch, step):
+    def val_epoch(self, epoch):
         batch_size = self.config['val']['batch_size']
         loss_recorder = LossRecorder(batch_size)
         self.model.train(False)
         self.model.set_mode()
 
         print_step = self.config['log']['print_step']
+        dataset_size = len(self.test_dataloader)
         for iter, data in enumerate(self.test_dataloader):
             loss = self.eval_step(data)
             loss_recorder.update_loss(loss)
 
             if ((iter + 1) % print_step) != 0:
                 continue
+            self.outputStep("VAL", epoch, iter+1, dataset_size, loss)
 
-            pretty_loss = [f'{k}: {v:.3f}' for k, v in loss.items()]
-            print("[INFO][Trainer::val_epoch]")
-            print("\t [VAL] [Epoch" + str(epoch) + '] ' + \
-                  str(iter + 1) + '/' + str(len(self.test_dataloader)) + \
-                  ' [Loss] {' + ', '.join(pretty_loss) + '}')
         self.outputLoss(loss_recorder)
-        return loss_recorder.loss_recorder, step
+        return loss_recorder.loss_recorder
+
+    def logWandb(self, loss_recorder, epoch, step):
+        loss = {f'test_{k}': v.avg for k, v in loss_recorder.items()}
+        wandb.log(loss, step=step)
+        wandb.log({f'lr{i}': g['lr'] for i, g in enumerate(self.optimizer.param_groups)}, step=step)
+        wandb.log({'epoch': epoch + 1}, step=step)
+        return True
 
     def start_train(self):
         min_eval_loss = 1e8
@@ -241,14 +239,15 @@ class Trainer(object):
         start_epoch = self.scheduler.last_epoch
         if isinstance(self.scheduler, (lr_scheduler.StepLR, lr_scheduler.MultiStepLR)):
             start_epoch -= 1
-        total_epochs = self.config['train']['epochs']
 
+        total_epochs = self.config['train']['epochs']
+        save_checkpoint = self.config['log']['save_checkpoint']
         for epoch in range(start_epoch, total_epochs):
-            print('-' * 10)
-            print('Epoch (%d/%s):' % (epoch + 1, total_epochs))
+            print('Epoch (' + str(epoch + 1) + '/' + str(total_epochs) + ').')
             self.show_lr()
 
-            eval_loss_recorder, step = self.train_epoch(epoch + 1, dataloaders, step)
+            step = self.train_epoch(epoch + 1, step)
+            eval_loss_recorder = self.val_epoch(epoch + 1)
 
             eval_loss = eval_loss_recorder['total'].avg
             if isinstance(self.scheduler, lr_scheduler.ReduceLROnPlateau):
@@ -256,28 +255,21 @@ class Trainer(object):
             elif isinstance(self.scheduler, (lr_scheduler.StepLR, lr_scheduler.MultiStepLR)):
                 self.scheduler.step()
             else:
-                raise NotImplementedError
-            loss = {f'test_{k}': v.avg for k, v in eval_loss_recorder.items()}
-            wandb.log(loss, step=step)
-            wandb.log({f'lr{i}': g['lr'] for i, g in enumerate(self.optimizer.param_groups)}, step=step)
-            wandb.log({'epoch': epoch + 1}, step=step)
+                print("[ERROR][Trainer::start_train]")
+                print("\t scheduler step function not found!")
+                return False
 
-            print('Epoch (' + str(epoch + 1) + '/' + str(total_epochs) + ').')
+            self.logWandb(eval_loss_recorder, epoch, step)
 
-            # save checkpoint
-            if self.config['log']['save_checkpoint']:
-                self.save('last')
-            print('Saved the latest checkpoint.')
+            if save_checkpoint:
+                self.saveModel()
             if epoch==-1 or eval_loss<min_eval_loss:
-                if self.config['log']['save_checkpoint']:
-                    self.save('best')
+                if save_checkpoint:
+                    self.saveModel('best')
                 min_eval_loss = eval_loss
-                print('Saved the best checkpoint.')
-                print('=' * 10)
                 for loss_name, loss_value in eval_loss_recorder.items():
                     wandb.summary[f'best_test_{loss_name}'] = loss_value.avg
                     print('Currently the best val loss (%s) is: %f' % (loss_name, loss_value.avg))
-                print('=' * 10)
         return True
 
     def train(self):
