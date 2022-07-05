@@ -185,11 +185,13 @@ class Trainer(object):
 
         print("[INFO][Trainer::train_epoch]")
         print("\t start train epoch", epoch, "...")
-        for iter, data in tqdm(enumerate(self.train_dataloader)):
+        iter = 0
+        for data in tqdm(self.train_dataloader):
+            iter += 1
             loss = self.train_step(data)
             loss_recorder.update_loss(loss)
 
-            if ((iter + 1) % print_step) == 0:
+            if (iter % print_step) == 0:
                 loss = {f'train_{k}': v for k, v in loss.items()}
                 wandb.log(loss, step=step)
                 wandb.log({'epoch': epoch}, step=step)
