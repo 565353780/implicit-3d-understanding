@@ -48,7 +48,6 @@ SCHEDULER = {
 TRAIN = {
     'epochs': 40000,
     'phase': 'all',
-    'freeze': [],
     'batch_size': 24,
 }
 
