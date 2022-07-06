@@ -23,7 +23,7 @@ class PreProcesser(object):
     def __init__(self, config):
         self.del_intermediate_result = True
         self.skip_done = False
-        self.processes = 1
+        self.processes = 18
 
         self.scale_norm = 0.25
         self.bbox_half = 0.7
