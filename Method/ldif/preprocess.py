@@ -12,8 +12,6 @@ from PIL import Image
 from multiprocessing import Pool
 from scipy.spatial import cKDTree
 
-sys.path.append(".")
-
 from Config.configs import PIX3DConfig
 
 from Method.preprocess import \
@@ -24,9 +22,9 @@ class PreProcesser(object):
         self.del_intermediate_result = True
         self.skip_done = False
         self.processes = 12
-
         self.scale_norm = 0.25
         self.bbox_half = 0.7
+        self.neighbors = 30
 
         self.gaps_folder_path = "./external/ldif/gaps/bin/x86_64/"
         self.mesh_fusion_folder_path = "./external/mesh_fusion/"
@@ -36,17 +34,10 @@ class PreProcesser(object):
 
         self.bbox = ' '.join([str(-self.bbox_half), ] * 3 + [str(self.bbox_half), ] * 3)
         self.spacing = self.bbox_half * 2 / 32
-        return
-
-class PIX3DPreProcesser(PreProcesser):
-    def __init__(self, config):
-        super(PIX3DPreProcesser, self).__init__(config)
-
-        self.mesh_folder = self.config.metadata_path + "model/"
         self.output_root = self.config.root_path + "ldif/"
-        self.skip = ['IKEA_JULES_1.model_-108.706406967_-139.417398691']
 
-        self.neighbors = 30
+        self.mesh_folder = None
+        self.skip = []
         return
 
     def make_output_folder(self, mesh_path):
@@ -59,6 +50,17 @@ class PIX3DPreProcesser(PreProcesser):
             mesh_folder_name + "." + mesh_basename + "/"
         os.makedirs(output_folder, exist_ok=True)
         return output_folder
+
+    def process_mgnet(self, obj_path, output_folder, ext, neighbors):
+        obj_data = read_obj(obj_path, ['v', 'f'])
+        sampled_points = sample_pnts_from_obj(obj_data, 10000, mode='random')
+        sampled_points.tofile(output_folder + "gt_3dpoints." + ext)
+
+        tree = cKDTree(sampled_points)
+        dists, indices = tree.query(sampled_points, k=neighbors)
+        densities = np.array([max(dists[point_set, 1]) ** 2 for point_set in indices])
+        densities.tofile(output_folder + "densities." + ext)
+        return True
 
     def make_watertight(self, input_path, output_folder):
         output_path = output_folder + "mesh_orig.obj"
@@ -89,17 +91,6 @@ class PIX3DPreProcesser(PreProcesser):
         os.remove(transform_path)
         os.remove(depth_path)
         return output_path
-
-    def process_mgnet(self, obj_path, output_folder, ext, neighbors):
-        obj_data = read_obj(obj_path, ['v', 'f'])
-        sampled_points = sample_pnts_from_obj(obj_data, 10000, mode='random')
-        sampled_points.tofile(output_folder + "gt_3dpoints." + ext)
-
-        tree = cKDTree(sampled_points)
-        dists, indices = tree.query(sampled_points, k=neighbors)
-        densities = np.array([max(dists[point_set, 1]) ** 2 for point_set in indices])
-        densities.tofile(output_folder + "densities." + ext)
-        return True
 
     def processImage(self, sample):
         output_folder = self.make_output_folder(self.config.metadata_path + sample['model'])
@@ -195,14 +186,22 @@ class PIX3DPreProcesser(PreProcesser):
 
     def process(self):
         if not self.processAllImage():
-            print("[ERROR][PIX3DPreProcesser::process]")
+            print("[ERROR][PreProcesser::process]")
             print("\t processAllImage failed!")
             return False
         if not self.processAllMesh():
-            print("[ERROR][PIX3DPreProcesser::process]")
+            print("[ERROR][PreProcesser::process]")
             print("\t processAllMesh failed!")
             return False
         return True
+
+class PIX3DPreProcesser(PreProcesser):
+    def __init__(self, config):
+        super(PIX3DPreProcesser, self).__init__(config)
+
+        self.mesh_folder = self.config.metadata_path + "model/"
+        self.skip = ['IKEA_JULES_1.model_-108.706406967_-139.417398691']
+        return
 
 def demo():
     config = PIX3DConfig()

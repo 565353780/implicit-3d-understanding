@@ -64,7 +64,7 @@ then, run
 
 ```bash
 export LIBGL_ALWAYS_INDIRECT=0
-python Method/ldif/preprocess.py
+python preprocess.py
 ```
 
 #### SUN RGB-D
