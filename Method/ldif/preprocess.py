@@ -15,7 +15,7 @@ from scipy.spatial import cKDTree
 
 sys.path.append(".")
 
-from Config.pix3d import PIX3DConfig
+from Config.configs import PIX3DConfig
 
 # preprocess param
 del_intermediate_result = True
