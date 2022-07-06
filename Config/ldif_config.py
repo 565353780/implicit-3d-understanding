@@ -9,7 +9,7 @@ DEVICE = {
 DATA = {
     'batch_size': 24,
     'dataset': 'pix3d',
-    'split': 'data/pix3d/splits',
+    'split': './data/pix3d/splits/',
     'random_nomask': 0.0,
     'watertight': True,
     'near_surface_samples': 1024,
@@ -64,7 +64,7 @@ TEST = {
 
 LOG = {
     'project': 'LDIF_Train',
-    'name': 'test1',
+    'name': 'test2',
     'vis_path': 'visualization',
     'save_results': True,
     'vis_step': 100,
