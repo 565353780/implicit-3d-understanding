@@ -56,6 +56,36 @@ class PIX3DPreProcesser(PreProcesser):
         os.makedirs(output_folder, exist_ok=True)
         return output_folder
 
+    def make_watertight(self, input_path, output_folder):
+        output_path = os.path.join(output_folder, 'mesh_orig.obj')
+
+        # convert mesh to off
+        off_path = os.path.splitext(output_path)[0] + '.off'
+        subprocess.check_output(f'xvfb-run -a -s "-screen 0 800x600x24" meshlabserver -i {input_path} -o {off_path}',
+                                shell=True)
+
+        # scale mesh
+        subprocess.check_output(f'{self.python_bin} {self.mesh_fusion_folder_path}/scale.py'
+                                f' --in_file {off_path} --out_dir {output_folder} --t_dir {output_folder} --overwrite',
+                                shell=True)
+
+        # create depth maps
+        subprocess.check_output(f'xvfb-run -a -s "-screen 0 800x600x24" {self.python_bin} {self.mesh_fusion_folder_path}/fusion.py'
+                                f' --mode=render --in_file {off_path} --out_dir {output_folder} --overwrite',
+                                shell=True)
+
+        # produce watertight mesh
+        depth_path = off_path + '.h5'
+        transform_path = os.path.splitext(output_path)[0] + '.npz'
+        subprocess.check_output(f'{self.python_bin} {self.mesh_fusion_folder_path}/fusion.py --mode=fuse'
+                                f' --in_file {depth_path} --out_dir {output_folder} --t_dir {output_folder} --overwrite',
+                                shell=True)
+
+        os.remove(off_path)
+        os.remove(transform_path)
+        os.remove(depth_path)
+        return output_path
+
     def processImage(self, sample):
         output_folder = self.make_output_folder(os.path.join(self.config.metadata_path, sample['model']))
         img_name = os.path.splitext(os.path.split(sample['img'])[1])[0]
