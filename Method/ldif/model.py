@@ -515,15 +515,15 @@ class LDIF(nn.Module):
         return self.config['optimizer']
 
     def forward(self, data):
-        if 'uniform_samples' in data.keys():
-            samples = torch.cat([data['near_surface_samples'], data['uniform_samples']], 1)
-            len_near_surface = data['near_surface_class'].shape[1]
-            est_data = self.mesh_reconstruction(data['img'], data['cls'], samples=samples)
-            est_data['near_surface_class'] = est_data['global_decisions'][:, :len_near_surface, ...]
-            est_data['uniform_class'] = est_data['global_decisions'][:, len_near_surface:, ...]
-        else:
-            est_data = self.mesh_reconstruction(data['img'], data['cls'], occnet2gaps=data.get('occnet2gaps'))
+        if 'uniform_samples' not in data.keys():
+            return self.mesh_reconstruction(data['img'], data['cls'],
+                                            occnet2gaps=data.get('occnet2gaps'))
 
+        samples = torch.cat([data['near_surface_samples'], data['uniform_samples']], 1)
+        est_data = self.mesh_reconstruction(data['img'], data['cls'], samples=samples)
+        len_near_surface = data['near_surface_class'].shape[1]
+        est_data['near_surface_class'] = est_data['global_decisions'][:, :len_near_surface, ...]
+        est_data['uniform_class'] = est_data['global_decisions'][:, len_near_surface:, ...]
         return est_data
 
     def loss(self, est_data, gt_data):
