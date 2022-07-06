@@ -146,7 +146,6 @@ class Trainer(BaseLoader):
         batch_size = self.config['train']['batch_size']
         loss_recorder = LossRecorder(batch_size)
         self.model.train(True)
-        self.model.set_mode()
 
         print_step = self.config['log']['print_step']
 
@@ -170,7 +169,6 @@ class Trainer(BaseLoader):
         batch_size = self.config['val']['batch_size']
         loss_recorder = LossRecorder(batch_size)
         self.model.train(False)
-        self.model.set_mode()
 
         print("[INFO][Trainer::val_epoch]")
         print("\t start val epoch ...")
