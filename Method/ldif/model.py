@@ -10,19 +10,18 @@ import trimesh
 import torch
 import numpy as np
 import torch.nn as nn
-
 import torch.utils.model_zoo as model_zoo
 import torch.nn.functional as F
 
-from models.modules import resnet
+from skimage import measure
+
 from models.modules.resnet import model_urls
 from net_utils.misc import weights_init
-from external.ldif.representation.structured_implicit_function import StructuredImplicit
-from external.ldif.inference import extract_mesh
-from external.PIFu.lib import mesh_util
 from external.ldif.util import file_util, camera_util
 
 from Method.ldif.loss import LDIFLoss
+from Method.sdf import reconstruction
+from Method.resnet import resnet18_full
 
 def sample_quadric_surface(quadric, center, samples):
     # Sample the quadric surfaces and the RBFs in world space, and composite them.
@@ -68,6 +67,41 @@ def homogenize(m):
 
 def _unflatten(config, vector):
     return torch.split(vector, [1, 3, 6, config['model']['implicit_parameter_length']], -1)
+
+def marching_cubes(volume, mcubes_extent):
+  """Maps from a voxel grid of implicit surface samples to a Trimesh mesh."""
+  volume = np.squeeze(volume)
+  length, height, width = volume.shape
+  resolution = length
+  # This function doesn't support non-cube volumes:
+  assert resolution == height and resolution == width
+  thresh = -0.07
+  try:
+    vertices, faces, normals, _ = measure.marching_cubes(volume, thresh)
+    del normals
+    x, y, z = [np.array(x) for x in zip(*vertices)]
+    xyzw = np.stack([x, y, z, np.ones_like(x)], axis=1)
+    # Center the volume around the origin:
+    xyzw += np.array(
+        [[-resolution / 2.0, -resolution / 2.0, -resolution / 2.0, 0.]])
+    # This assumes the world is right handed with y up; matplotlib's renderer
+    # has z up and is left handed:
+    # Reflect across z, rotate about x, and rescale to [-0.5, 0.5].
+    xyzw *= np.array([[(2.0 * mcubes_extent) / resolution,
+                       (2.0 * mcubes_extent) / resolution,
+                       -1.0 * (2.0 * mcubes_extent) / resolution, 1]])
+    y_up_to_z_up = np.array([[0., 0., -1., 0.], [0., 1., 0., 0.],
+                             [1., 0., 0., 0.], [0., 0., 0., 1.]])
+    xyzw = np.matmul(y_up_to_z_up, xyzw.T).T
+    faces = np.stack([faces[..., 0], faces[..., 2], faces[..., 1]], axis=-1)
+    world_space_xyz = np.copy(xyzw[:, :3])
+    mesh = trimesh.Trimesh(vertices=world_space_xyz, faces=faces)
+    return True, mesh
+  except (ValueError, RuntimeError) as e:
+    print(
+        'Failed to extract mesh with error %s. Setting to unit sphere.' %
+        repr(e))
+    return False, trimesh.primitives.Sphere(radius=0.5)
 
 class StructuredImplicit(object):
     def __init__(self, config, constant, center, radius, iparam, net=None):
@@ -236,14 +270,12 @@ class BatchedCBNLayer(nn.Module):
         beta = self.fc_beta(shape_embedding)
         gamma = self.fc_gamma(shape_embedding)
         if self.training:
-            batch_mean, batch_variance = sample_embeddings.mean().detach(), sample_embeddings.var().detach()
+            batch_mean = sample_embeddings.mean().detach()
+            batch_variance = sample_embeddings.var().detach()
             self.running_mean = 0.995 * self.running_mean + 0.005 * batch_mean
             self.running_var = 0.995 * self.running_var + 0.005 * batch_variance
         sample_embeddings = (sample_embeddings - self.running_mean) / torch.sqrt(self.running_var + 1e-5)
-
-        out = gamma.unsqueeze(1) * sample_embeddings + beta.unsqueeze(1)
-
-        return out
+        return gamma.unsqueeze(1) * sample_embeddings + beta.unsqueeze(1)
 
 class BatchedOccNetResnetLayer(nn.Module):
     def __init__(self, f_dim=32):
@@ -263,7 +295,6 @@ class BatchedOccNetResnetLayer(nn.Module):
 
         sample_embeddings = torch.relu(sample_embeddings)
         sample_embeddings = self.fc2(sample_embeddings)
-
         return init_sample_embeddings + sample_embeddings
 
 class OccNetDecoder(nn.Module):
@@ -274,8 +305,14 @@ class OccNetDecoder(nn.Module):
         self.bn = BatchedCBNLayer(f_dim=f_dim)
         self.fc2 = nn.Linear(f_dim, 1)
 
+    def forward(self, embedding, samples):
+        sample_embeddings = self.fc1(samples)
+        sample_embeddings = self.resnet(embedding, sample_embeddings)
+        sample_embeddings = self.bn(embedding, sample_embeddings)
+        vals = self.fc2(sample_embeddings)
+        return vals
+
     def write_occnet_file(self, path):
-        """Serializes an occnet network and writes it to disk."""
         f = file_util.open_file(path, 'wb')
 
         def write_fc_layer(layer):
@@ -308,21 +345,16 @@ class OccNetDecoder(nn.Module):
         f.write(weights.astype('f').tostring())
         f.write(struct.pack('f', bias))
         f.close()
-
-    def forward(self, embedding, samples):
-        sample_embeddings = self.fc1(samples)
-        sample_embeddings = self.resnet(embedding, sample_embeddings)
-        sample_embeddings = self.bn(embedding, sample_embeddings)
-        vals = self.fc2(sample_embeddings)
-        return vals
+        return True
 
 class LDIF_SubNet(nn.Module):
     def __init__(self, config, n_classes=9,
                  pretrained_encoder=True):
         super(LDIF_SubNet, self).__init__()
+        gauss_kernel_num = 10
 
-        '''Module parameters'''
         self.config = config
+
         self.bottleneck_size = self.config['model'].get('bottleneck_size', 2048)
         self.config['model']['bottleneck_size'] = self.bottleneck_size
         self.element_count = self.config['model']['element_count']
@@ -331,13 +363,13 @@ class LDIF_SubNet(nn.Module):
         self.config['model']['effective_element_count'] = self.effective_element_count
         self.implicit_parameter_length = self.config['model']['implicit_parameter_length']
         self.element_embedding_length = 10 + self.implicit_parameter_length
-        self.config['model']['analytic_code_len'] = 10 * self.element_count
+        self.config['model']['analytic_code_len'] = gauss_kernel_num * self.element_count
         self.config['model']['structured_implicit_vector_len'] = \
             self.element_embedding_length * self.element_count
+
         self._temp_folder = None
 
-        '''Modules'''
-        self.encoder = resnet.resnet18_full(
+        self.encoder = resnet18_full(
             pretrained=False, num_classes=self.bottleneck_size,
             input_channels=4 if self.config['data'].get('mask', False) else 3)
         self.mlp = nn.Sequential(
@@ -390,113 +422,89 @@ class LDIF_SubNet(nn.Module):
                        f' {grd_path} -resolution {resolution} -extent {extent}')
                 subprocess.check_output(cmd, shell=True)
                 _, volume = file_util.read_grd(grd_path)
-                _, m = extract_mesh.marching_cubes(volume, extent)
+                _, m = marching_cubes(volume, extent)
                 mesh.append(m)
         else:
-            mesh = mesh_util.reconstruction(structured_implicit=structured_implicit, resolution=resolution,
-                                            b_min=np.array([-extent] * 3), b_max=np.array([extent] * 3),
-                                            use_octree=True, num_samples=num_samples, marching_cube=marching_cube)
+            mesh = reconstruction(structured_implicit, resolution,
+                                  np.array([-extent] * 3), np.array([extent] * 3),
+                                  num_samples, marching_cube)
         return mesh
 
-    def forward(self, image=None, size_cls=None, samples=None, occnet2gaps=None, structured_implicit=None,
-                resolution=None, cuda=True, reconstruction='mesh', apply_class_transfer=True):
-        return_dict = {}
-        # predict structured_implicit
-        return_structured_implicit = structured_implicit
-        if isinstance(structured_implicit, dict):
-            structured_implicit = StructuredImplicit(config=self.config, **structured_implicit, net=self)
-        elif structured_implicit is None or isinstance(structured_implicit, bool):
-            # encoder
-            # image encoding
-            embedding = self.encoder(image)
-            return_dict['ldif_afeature'] = embedding
-            embedding = torch.cat([embedding, size_cls], 1)
-            structured_implicit_activations = self.mlp(embedding)
-            structured_implicit_activations = torch.reshape(
-                structured_implicit_activations, [-1, self.element_count, self.element_embedding_length])
-            return_dict['structured_implicit_activations'] = structured_implicit_activations
+    def forward(self, image, size_cls, samples=None, occnet2gaps=None):
+        return_structured_implicit = False
+        reconstruction='mesh'
 
-            # SIF decoder
-            structured_implicit = StructuredImplicit.from_activation(
-                self.config, structured_implicit_activations, self)
-        else:
-            raise NotImplementedError
+        return_dict = {}
+
+
+        # encoder
+        # image encoding
+        embedding = self.encoder(image)
+        return_dict['ldif_afeature'] = embedding
+        embedding = torch.cat([embedding, size_cls], 1)
+        structured_implicit_activations = self.mlp(embedding)
+        structured_implicit_activations = torch.reshape(
+            structured_implicit_activations, [-1, self.element_count, self.element_embedding_length])
+        return_dict['structured_implicit_activations'] = structured_implicit_activations
+
+        # SIF decoder
+        structured_implicit = StructuredImplicit.from_activation(
+            self.config, structured_implicit_activations, self)
 
         return_dict['structured_implicit'] = structured_implicit.dict()
 
         # if only want structured_implicit
-        if return_structured_implicit is True:
+        if return_structured_implicit:
             return return_dict
 
         # predict class or mesh
         if samples is not None:
-            global_decisions, local_outputs = structured_implicit.class_at_samples(samples, apply_class_transfer)
+            global_decisions, local_outputs = structured_implicit.class_at_samples(samples, True)
             return_dict.update({'global_decisions': global_decisions,
                                 'element_centers': structured_implicit.centers})
             return return_dict
-        elif reconstruction is not None:
-            if resolution is None:
-                resolution =  self.config['data'].get('marching_cube_resolution', 128)
-            mesh = self.extract_mesh(structured_implicit, extent=self.config['data']['bounding_box'],
-                                     resolution=resolution, cuda=cuda, marching_cube=reconstruction == 'mesh')
-            if reconstruction == 'mesh':
-                if occnet2gaps is not None:
-                    mesh = [m.apply_transform(t.inverse().cpu().numpy()) if not isinstance(m, trimesh.primitives.Sphere) else m
-                            for m, t in zip(mesh, occnet2gaps)]
 
-                mesh_coordinates_results = []
-                faces = []
-                for m in mesh:
-                    mesh_coordinates_results.append(
-                        torch.from_numpy(m.vertices).type(torch.float32).transpose(-1, -2).to(structured_implicit.device))
-                    faces.append(torch.from_numpy(m.faces).to(structured_implicit.device) + 1)
-                return_dict.update({'mesh': mesh, 'mesh_coordinates_results': [mesh_coordinates_results, ],
-                                    'faces': faces, 'element_centers': structured_implicit.centers})
-            elif reconstruction == 'sdf':
-                return_dict.update({'sdf': mesh[0], 'mat': mesh[1], 'element_centers': structured_implicit.centers})
-            else:
-                raise NotImplementedError
-            return return_dict
+        resolution =  self.config['data'].get('marching_cube_resolution', 128)
+        mesh = self.extract_mesh(structured_implicit, extent=self.config['data']['bounding_box'],
+                                 resolution=resolution, cuda=True, marching_cube=reconstruction == 'mesh')
+
+        if reconstruction == 'mesh':
+            if occnet2gaps is not None:
+                mesh = [m.apply_transform(t.inverse().cpu().numpy()) if not isinstance(m, trimesh.primitives.Sphere) else m
+                        for m, t in zip(mesh, occnet2gaps)]
+
+            mesh_coordinates_results = []
+            faces = []
+            for m in mesh:
+                mesh_coordinates_results.append(
+                    torch.from_numpy(m.vertices).type(torch.float32).transpose(-1, -2).to(structured_implicit.device))
+                faces.append(torch.from_numpy(m.faces).to(structured_implicit.device) + 1)
+            return_dict.update({'mesh': mesh, 'mesh_coordinates_results': [mesh_coordinates_results, ],
+                                'faces': faces, 'element_centers': structured_implicit.centers})
+        elif reconstruction == 'sdf':
+            return_dict.update({'sdf': mesh[0], 'mat': mesh[1], 'element_centers': structured_implicit.centers})
         else:
-            return return_dict
+            raise NotImplementedError
+        return return_dict
 
     def __del__(self):
         if self._temp_folder is not None:
             shutil.rmtree(self._temp_folder)
 
 class LDIF(nn.Module):
-
     def __init__(self, config, mode):
         super(LDIF, self).__init__()
         self.config = config
         self.mode = mode
 
-        self.mesh_reconstruction = LDIF_SubNet(config)
-        self.mesh_reconstruction = nn.DataParallel(self.mesh_reconstruction)
+        self.mesh_reconstruction = nn.DataParallel(LDIF_SubNet(config))
 
         self.mesh_reconstruction_loss = LDIFLoss(1, self.config)
 
-        self.freeze_modules()
+        self.set_mode()
         return
 
-    def freeze_modules(self):
-        if self.mode == 'train':
-            freeze_layers = self.config['train']['freeze']
-            for layer in freeze_layers:
-                if not hasattr(self, layer):
-                    continue
-                for param in getattr(self, layer).parameters():
-                    param.requires_grad = False
-                print('The module: %s is fixed.' % (layer))
-        return True
-
     def set_mode(self):
-        freeze_layers = self.config['train']['freeze']
-        for name, child in self.named_children():
-            if name in freeze_layers:
-                child.train(False)
-
-        # turn off BatchNorm if batch_size == 1.
         if self.config[self.mode]['batch_size'] == 1:
             for m in self.modules():
                 if m._get_name().find('BatchNorm') != -1:
@@ -516,9 +524,6 @@ class LDIF(nn.Module):
         return est_data
 
     def loss(self, est_data, gt_data):
-        '''
-        calculate loss of est_out given gt_out.
-        '''
         loss = self.mesh_reconstruction_loss(est_data, gt_data)
         total_loss = sum(loss.values())
         for key, item in loss.items():
