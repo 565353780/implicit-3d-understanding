@@ -118,10 +118,10 @@ class LDIFSDF(nn.Module):
             shutil.rmtree(self._temp_folder)
         return
 
-class LDIF_SubNet(LDIFSDF):
+class LDIFMesh(LDIFSDF):
     def __init__(self, config, n_classes=9,
                  pretrained_encoder=True):
-        super(LDIF_SubNet, self).__init__(config, n_classes, pretrained_encoder)
+        super(LDIFMesh, self).__init__(config, n_classes, pretrained_encoder)
         return
 
     def forward(self, image, size_cls, samples=None, occnet2gaps=None):
@@ -170,7 +170,7 @@ class LDIF(nn.Module):
         self.config = config
         self.mode = mode
 
-        self.mesh_reconstruction = nn.DataParallel(LDIF_SubNet(config))
+        self.mesh_reconstruction = nn.DataParallel(LDIFMesh(config))
 
         self.mesh_reconstruction_loss = LDIFLoss(1, self.config)
 
