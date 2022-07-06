@@ -23,7 +23,7 @@ class PreProcesser(object):
     def __init__(self, config):
         self.del_intermediate_result = True
         self.skip_done = False
-        self.processes = 12
+        self.processes = 1
 
         self.scale_norm = 0.25
         self.bbox_half = 0.7
@@ -42,18 +42,21 @@ class PIX3DPreProcesser(PreProcesser):
     def __init__(self, config):
         super(PIX3DPreProcesser, self).__init__(config)
 
-        self.mesh_folder = self.config.metadata_path + "model"
-        self.output_root = self.config.root_path + "ldif"
+        self.mesh_folder = self.config.metadata_path + "model/"
+        self.output_root = self.config.root_path + "ldif/"
         self.skip = ['IKEA_JULES_1.model_-108.706406967_-139.417398691']
 
         self.neighbors = 30
         return
 
     def make_output_folder(self, mesh_path):
-        rel_folder = os.path.relpath(mesh_path, self.mesh_folder).split('/')
-        model_folder = '.'.join(os.path.splitext(mesh_path)[0].split('/')[-2:])
-        rel_folder = os.path.join(*rel_folder[:-2], model_folder)
-        output_folder = os.path.join(self.output_root, rel_folder)
+        mesh_path_split_list = mesh_path.split("/")
+        mesh_class_name = mesh_path_split_list[-3]
+        mesh_folder_name = mesh_path_split_list[-2]
+        mesh_basename = mesh_path_split_list[-1].split(".")[0]
+
+        output_folder = self.output_root + mesh_class_name + "/" + \
+            mesh_folder_name + "." + mesh_basename + "/"
         os.makedirs(output_folder, exist_ok=True)
         return output_folder
 
@@ -99,7 +102,7 @@ class PIX3DPreProcesser(PreProcesser):
         return True
 
     def processImage(self, sample):
-        output_folder = self.make_output_folder(os.path.join(self.config.metadata_path, sample['model']))
+        output_folder = self.make_output_folder(self.config.metadata_path + sample['model'])
         img_name = os.path.splitext(os.path.split(sample['img'])[1])[0]
         output_path = os.path.join(output_folder, img_name + '.npy')
         if not self.skip_done or not os.path.exists(output_path):
