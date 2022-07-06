@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from Config.ldif_config import LDIF_CONFIG
+from Config.ldif import LDIF_CONFIG
+
+from Config.pix3d import PIX3DConfig
 
