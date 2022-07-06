@@ -1,11 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
-import struct
-import tempfile
 import shutil
-import subprocess
 import trimesh
 import torch
 import numpy as np
@@ -13,13 +9,22 @@ import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
 import torch.nn.functional as F
 
-from skimage import measure
-
-from external.ldif.util import file_util, camera_util
-
 from Method.ldif.loss import LDIFLoss
 from Method.sdf import reconstruction
 from Method.resnet import resnet18_full, model_urls
+
+def roll_pitch_yaw_to_rotation_matrices(roll_pitch_yaw):
+    cosines = torch.cos(roll_pitch_yaw)
+    sines = torch.sin(roll_pitch_yaw)
+    cx, cy, cz = cosines.unbind(-1)
+    sx, sy, sz = sines.unbind(-1)
+    rotation = torch.stack(
+        [cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx,
+         sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx,
+         -sy, cy * sx, cy * cx], -1
+    )
+    rotation = torch.reshape(rotation, [rotation.shape[0], -1, 3, 3])
+    return rotation
 
 def sample_quadric_surface(quadric, center, samples):
     # Sample the quadric surfaces and the RBFs in world space, and composite them.
@@ -34,7 +39,7 @@ def decode_covariance_roll_pitch_yaw(radius, invert=False):
     # Converts 6-D radus vectors to the corresponding covariance matrices.
     d = 1.0 / (radius[..., :3] + 1e-8) if invert else radius[..., :3]
     diag = torch.diag_embed(d)
-    rotation = camera_util.roll_pitch_yaw_to_rotation_matrices(radius[..., 3:6])
+    rotation = roll_pitch_yaw_to_rotation_matrices(radius[..., 3:6])
     return torch.matmul(torch.matmul(rotation, diag), rotation.transpose(-1, -2))
 
 def sample_cov_bf(center, radius, samples):
@@ -65,36 +70,6 @@ def homogenize(m):
 
 def _unflatten(config, vector):
     return torch.split(vector, [1, 3, 6, config['model']['implicit_parameter_length']], -1)
-
-def marching_cubes(volume, mcubes_extent):
-  """Maps from a voxel grid of implicit surface samples to a Trimesh mesh."""
-  volume = np.squeeze(volume)
-  length, height, width = volume.shape
-  resolution = length
-  assert resolution == height and resolution == width
-  thresh = -0.07
-  try:
-    vertices, faces, normals, _ = measure.marching_cubes(volume, thresh)
-    del normals
-    x, y, z = [np.array(x) for x in zip(*vertices)]
-    xyzw = np.stack([x, y, z, np.ones_like(x)], axis=1)
-    xyzw += np.array(
-        [[-resolution / 2.0, -resolution / 2.0, -resolution / 2.0, 0.]])
-    xyzw *= np.array([[(2.0 * mcubes_extent) / resolution,
-                       (2.0 * mcubes_extent) / resolution,
-                       -1.0 * (2.0 * mcubes_extent) / resolution, 1]])
-    y_up_to_z_up = np.array([[0., 0., -1., 0.], [0., 1., 0., 0.],
-                             [1., 0., 0., 0.], [0., 0., 0., 1.]])
-    xyzw = np.matmul(y_up_to_z_up, xyzw.T).T
-    faces = np.stack([faces[..., 0], faces[..., 2], faces[..., 1]], axis=-1)
-    world_space_xyz = np.copy(xyzw[:, :3])
-    mesh = trimesh.Trimesh(vertices=world_space_xyz, faces=faces)
-    return True, mesh
-  except (ValueError, RuntimeError) as e:
-    print(
-        'Failed to extract mesh with error %s. Setting to unit sphere.' %
-        repr(e))
-    return False, trimesh.primitives.Sphere(radius=0.5)
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -160,7 +135,7 @@ class StructuredImplicit(object):
         lower_row = torch.tensor([0., 0., 0., 1.], device=self.device).expand(self.batch_size, self.element_count, 1, -1)
         tx = torch.cat([tx, lower_row], -2)
 
-        rotation = camera_util.roll_pitch_yaw_to_rotation_matrices(self.radii[..., 3:6]).inverse()
+        rotation = roll_pitch_yaw_to_rotation_matrices(self.radii[..., 3:6]).inverse()
         diag = 1.0 / (torch.sqrt(self.radii[..., :3] + 1e-8) + 1e-8)
         scale = torch.diag_embed(diag)
 
@@ -218,22 +193,6 @@ class StructuredImplicit(object):
         if self._analytic_code is None:
             self._analytic_code = torch.cat([self.constants, self.centers, self.radii], -1)
         return self._analytic_code
-
-    def savetxt(self, path):
-        assert self.vector.shape[0] == 1
-        sif_vector = self.vector.squeeze().cpu().numpy()
-        sif_vector[:, 4:7] = np.sqrt(np.maximum(sif_vector[:, 4:7], 0))
-        out = 'SIF\n%i %i %i\n' % (self.element_count, 0, self.implicit_parameter_length)
-        for row_idx in range(self.element_count):
-            row = ' '.join(10 * ['%.9g']) % tuple(sif_vector[row_idx, :10].tolist())
-            symmetry = int(row_idx < self.sym_element_count)
-            row += ' %i' % symmetry
-            implicit_params = ' '.join(self.implicit_parameter_length * ['%.9g']) % (
-                tuple(sif_vector[row_idx, 10:].tolist()))
-            row += ' ' + implicit_params
-            row += '\n'
-            out += row
-        file_util.writetxt(path, out)
 
     def unbind(self):
         return [StructuredImplicit.from_packed_vector(self.config, self.vector[i:i+1], self.net)
@@ -299,41 +258,6 @@ class OccNetDecoder(nn.Module):
         vals = self.fc2(sample_embeddings)
         return vals
 
-    def write_occnet_file(self, path):
-        f = file_util.open_file(path, 'wb')
-
-        def write_fc_layer(layer):
-            weights = layer.weight.t().cpu().numpy()
-            biases = layer.bias.cpu().numpy()
-            f.write(weights.astype('f').tostring())
-            f.write(biases.astype('f').tostring())
-
-        def write_cbn_layer(layer):
-            write_fc_layer(layer.fc_beta)
-            write_fc_layer(layer.fc_gamma)
-            running_mean = layer.running_mean.item()
-            running_var = layer.running_var.item()
-            f.write(struct.pack('ff', running_mean, running_var))
-
-        # write_header
-        f.write(struct.pack('ii', 1, self.fc1.out_features))
-        # write_input_layer
-        write_fc_layer(self.fc1)
-        # write_resnet
-        write_cbn_layer(self.resnet.bn1)
-        write_fc_layer(self.resnet.fc1)
-        write_cbn_layer(self.resnet.bn2)
-        write_fc_layer(self.resnet.fc2)
-        # write_cbn_layer
-        write_cbn_layer(self.bn)
-        # write_activation_layer
-        weights = self.fc2.weight.t().cpu().numpy()
-        bias = self.fc2.bias.data.item()
-        f.write(weights.astype('f').tostring())
-        f.write(struct.pack('f', bias))
-        f.close()
-        return True
-
 class LDIFSDF(nn.Module):
     def __init__(self, config, n_classes=9,
                  pretrained_encoder=True):
@@ -389,10 +313,10 @@ class LDIFSDF(nn.Module):
         vals = torch.reshape(batched_vals, [batch_size, element_count, sample_count, 1])
         return vals
 
-    def extract_mesh(self, structured_implicit, resolution=64, extent=0.75, num_samples=10000):
+    def extract_mesh(self, structured_implicit, resolution=64, extent=0.75, num_samples=10000, marching_cube=True):
         mesh = reconstruction(structured_implicit, resolution,
                               np.array([-extent] * 3), np.array([extent] * 3),
-                              num_samples, False)
+                              num_samples, marching_cube)
         return mesh
 
     def forward(self, image, size_cls, samples=None, occnet2gaps=None):
@@ -419,8 +343,7 @@ class LDIFSDF(nn.Module):
 
         resolution =  self.config['data'].get('marching_cube_resolution', 128)
         mesh = self.extract_mesh(structured_implicit, extent=self.config['data']['bounding_box'],
-                                 resolution=resolution, cuda=True,
-                                 marching_cube=False)
+                                 resolution=resolution, marching_cube=False)
 
         return_dict.update({'sdf': mesh[0], 'mat': mesh[1],
                             'element_centers': structured_implicit.centers})
@@ -437,33 +360,6 @@ class LDIF_SubNet(LDIFSDF):
         super(LDIF_SubNet, self).__init__(config, n_classes, pretrained_encoder)
         return
 
-    def extract_mesh(self, structured_implicit, resolution=64, extent=0.75, num_samples=10000,
-                     cuda=True):
-        if cuda:
-            mesh = []
-            for s in structured_implicit.unbind():
-                if self._temp_folder is None:
-                    self._temp_folder = tempfile.mktemp(dir='/dev/shm')
-                    os.makedirs(self._temp_folder)
-                    self.decoder.write_occnet_file(os.path.join(self._temp_folder, 'serialized.occnet'))
-                    shutil.copy('./external/ldif/ldif2mesh/ldif2mesh', self._temp_folder)
-                si_path = os.path.join(self._temp_folder, 'ldif.txt')
-                grd_path = os.path.join(self._temp_folder, 'grid.grd')
-
-                s.savetxt(si_path)
-                cmd = (f"{os.path.join(self._temp_folder, 'ldif2mesh')} {si_path}" 
-                       f" {os.path.join(self._temp_folder, 'serialized.occnet')}"
-                       f' {grd_path} -resolution {resolution} -extent {extent}')
-                subprocess.check_output(cmd, shell=True)
-                _, volume = file_util.read_grd(grd_path)
-                _, m = marching_cubes(volume, extent)
-                mesh.append(m)
-        else:
-            mesh = reconstruction(structured_implicit, resolution,
-                                  np.array([-extent] * 3), np.array([extent] * 3),
-                                  num_samples, True)
-        return mesh
-
     def forward(self, image, size_cls, samples=None, occnet2gaps=None):
         return_dict = {}
 
@@ -488,7 +384,7 @@ class LDIF_SubNet(LDIFSDF):
 
         resolution =  self.config['data'].get('marching_cube_resolution', 128)
         mesh = self.extract_mesh(structured_implicit, extent=self.config['data']['bounding_box'],
-                                 resolution=resolution, cuda=True)
+                                 resolution=resolution, marching_cube=True)
 
         if occnet2gaps is not None:
             mesh = [m.apply_transform(t.inverse().cpu().numpy()) if not isinstance(m, trimesh.primitives.Sphere) else m
