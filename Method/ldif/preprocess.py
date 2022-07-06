@@ -61,7 +61,7 @@ class PIX3DPreProcesser(PreProcesser):
         return output_folder
 
     def make_watertight(self, input_path, output_folder):
-        output_path = os.path.join(output_folder, 'mesh_orig.obj')
+        output_path = output_folder + "mesh_orig.obj"
 
         # convert mesh to off
         off_path = os.path.splitext(output_path)[0] + '.off'
@@ -93,26 +93,28 @@ class PIX3DPreProcesser(PreProcesser):
     def process_mgnet(self, obj_path, output_folder, ext, neighbors):
         obj_data = read_obj(obj_path, ['v', 'f'])
         sampled_points = sample_pnts_from_obj(obj_data, 10000, mode='random')
-        sampled_points.tofile(os.path.join(output_folder, f'gt_3dpoints.{ext}'))
+        sampled_points.tofile(output_folder + "gt_3dpoints." + ext)
 
         tree = cKDTree(sampled_points)
         dists, indices = tree.query(sampled_points, k=neighbors)
         densities = np.array([max(dists[point_set, 1]) ** 2 for point_set in indices])
-        densities.tofile(os.path.join(output_folder, f'densities.{ext}'))
+        densities.tofile(output_folder + "densities." + ext)
         return True
 
     def processImage(self, sample):
         output_folder = self.make_output_folder(self.config.metadata_path + sample['model'])
+
         img_name = os.path.splitext(os.path.split(sample['img'])[1])[0]
-        output_path = os.path.join(output_folder, img_name + '.npy')
+        output_path = output_folder + img_name + '.npy'
         if not self.skip_done or not os.path.exists(output_path):
-            img = np.array(Image.open(os.path.join(self.config.metadata_path, sample['img'])).convert('RGB'))
+            img = np.array(Image.open(self.config.metadata_path + sample['img']).convert('RGB'))
             img = img[sample['bbox'][1]:sample['bbox'][3], sample['bbox'][0]:sample['bbox'][2]]
             np.save(output_path, img)
+
         img_name = os.path.splitext(os.path.split(sample['mask'])[1])[0]
-        output_path = os.path.join(output_folder, img_name + '_mask.npy')
+        output_path = output_folder + img_name + '_mask.npy'
         if not self.skip_done or not os.path.exists(output_path):
-            img = np.array(Image.open(os.path.join(self.config.metadata_path, sample['mask'])).convert('L'))
+            img = np.array(Image.open(self.config.metadata_path + sample['mask']).convert('L'))
             img = img[sample['bbox'][1]:sample['bbox'][3], sample['bbox'][0]:sample['bbox'][2]]
             np.save(output_path, img)
         return True
@@ -140,7 +142,7 @@ class PIX3DPreProcesser(PreProcesser):
             f'xvfb-run -a -s "-screen 0 800x600x24" meshlabserver -i {watertight_obj} -o {watertight_ply}',
             shell=True)
 
-        scaled_ply = os.path.join(output_folder, 'scaled_watertight.ply')
+        scaled_ply = output_folder + "scaled_watertight.ply"
         os.system(f'{self.gaps_folder_path}/msh2msh {watertight_ply} {scaled_ply} -scale_by_pca -translate_by_centroid'
                   f' -scale {self.scale_norm} -debug_matrix {output_folder}/orig_to_gaps.txt')
 
@@ -185,7 +187,7 @@ class PIX3DPreProcesser(PreProcesser):
         return True
 
     def processAllMesh(self):
-        mesh_paths = glob.glob(os.path.join(self.mesh_folder, '*', '*', '*.obj'))
+        mesh_paths = glob.glob(self.mesh_folder + "*/*/*.obj")
 
         with Pool(self.processes) as p:
             r = list(tqdm.tqdm(p.imap(self.processMesh, mesh_paths), total=len(mesh_paths)))
