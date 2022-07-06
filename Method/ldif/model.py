@@ -83,7 +83,7 @@ class LDIFSDF(nn.Module):
                               num_samples, marching_cube)
         return mesh
 
-    def forward(self, image, size_cls, samples=None, occnet2gaps=None):
+    def forward(self, image, size_cls, samples=None):
         return_dict = {}
 
         embedding = self.encoder(image)
