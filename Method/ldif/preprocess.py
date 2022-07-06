@@ -10,13 +10,14 @@ import subprocess
 import numpy as np
 from PIL import Image
 from multiprocessing import Pool
+from scipy.spatial import cKDTree
 
 sys.path.append(".")
 
 from Config.configs import PIX3DConfig
 
 from Method.preprocess import \
-    normalize, make_watertight, remove_if_exists, process_mgnet
+    read_obj, sample_pnts_from_obj, normalize, remove_if_exists
 
 class PreProcesser(object):
     def __init__(self, config):
@@ -28,7 +29,7 @@ class PreProcesser(object):
         self.bbox_half = 0.7
 
         self.gaps_folder_path = "./external/ldif/gaps/bin/x86_64/"
-        self.mesh_fusion_folder_path = ".external/mesh_fusion/"
+        self.mesh_fusion_folder_path = "./external/mesh_fusion/"
         self.python_bin = sys.executable
 
         self.config = config
@@ -65,19 +66,19 @@ class PIX3DPreProcesser(PreProcesser):
                                 shell=True)
 
         # scale mesh
-        subprocess.check_output(f'{self.python_bin} {self.mesh_fusion_folder_path}/scale.py'
+        subprocess.check_output(f'{self.python_bin} {self.mesh_fusion_folder_path}scale.py'
                                 f' --in_file {off_path} --out_dir {output_folder} --t_dir {output_folder} --overwrite',
                                 shell=True)
 
         # create depth maps
-        subprocess.check_output(f'xvfb-run -a -s "-screen 0 800x600x24" {self.python_bin} {self.mesh_fusion_folder_path}/fusion.py'
+        subprocess.check_output(f'xvfb-run -a -s "-screen 0 800x600x24" {self.python_bin} {self.mesh_fusion_folder_path}fusion.py'
                                 f' --mode=render --in_file {off_path} --out_dir {output_folder} --overwrite',
                                 shell=True)
 
         # produce watertight mesh
         depth_path = off_path + '.h5'
         transform_path = os.path.splitext(output_path)[0] + '.npz'
-        subprocess.check_output(f'{self.python_bin} {self.mesh_fusion_folder_path}/fusion.py --mode=fuse'
+        subprocess.check_output(f'{self.python_bin} {self.mesh_fusion_folder_path}fusion.py --mode=fuse'
                                 f' --in_file {depth_path} --out_dir {output_folder} --t_dir {output_folder} --overwrite',
                                 shell=True)
 
@@ -85,6 +86,17 @@ class PIX3DPreProcesser(PreProcesser):
         os.remove(transform_path)
         os.remove(depth_path)
         return output_path
+
+    def process_mgnet(self, obj_path, output_folder, ext, neighbors):
+        obj_data = read_obj(obj_path, ['v', 'f'])
+        sampled_points = sample_pnts_from_obj(obj_data, 10000, mode='random')
+        sampled_points.tofile(os.path.join(output_folder, f'gt_3dpoints.{ext}'))
+
+        tree = cKDTree(sampled_points)
+        dists, indices = tree.query(sampled_points, k=neighbors)
+        densities = np.array([max(dists[point_set, 1]) ** 2 for point_set in indices])
+        densities.tofile(os.path.join(output_folder, f'densities.{ext}'))
+        return True
 
     def processImage(self, sample):
         output_folder = self.make_output_folder(os.path.join(self.config.metadata_path, sample['model']))
@@ -113,7 +125,7 @@ class PIX3DPreProcesser(PreProcesser):
 
         # Step 0) Normalize and watertight the mesh before applying all other operations.
         normalized_obj = normalize(mesh_path, output_folder)
-        watertight_obj = make_watertight(normalized_obj, output_folder)
+        watertight_obj = self.make_watertight(normalized_obj, output_folder)
 
         # conver mesh to ply
         normalized_ply = os.path.splitext(normalized_obj)[0] + '.ply'
@@ -142,8 +154,8 @@ class PIX3DPreProcesser(PreProcesser):
                   f' -uniform_in_bbox -bbox {self.bbox} -npoints 100000 -binary_sdf')
 
         # Step 4) Generate surface points for MGNet:
-        process_mgnet(watertight_obj, output_folder, 'mgn', self.neighbors)
-        process_mgnet(normalized_obj, output_folder, 'org', self.neighbors)
+        self.process_mgnet(watertight_obj, output_folder, 'mgn', self.neighbors)
+        self.process_mgnet(normalized_obj, output_folder, 'org', self.neighbors)
 
         if self.del_intermediate_result:
             remove_if_exists(normalized_obj)

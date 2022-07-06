@@ -4,7 +4,6 @@
 import os
 import re
 import numpy as np
-from scipy.spatial import cKDTree
 
 def read_obj(model_path, flags = ('v')):
     fid = open(model_path, 'r')
@@ -179,16 +178,5 @@ def normalize(input_path, output_folder):
 def remove_if_exists(f):
     if os.path.exists(f):
         os.remove(f)
-    return True
-
-def process_mgnet(obj_path, output_folder, ext, neighbors):
-    obj_data = read_obj(obj_path, ['v', 'f'])
-    sampled_points = sample_pnts_from_obj(obj_data, 10000, mode='random')
-    sampled_points.tofile(os.path.join(output_folder, f'gt_3dpoints.{ext}'))
-
-    tree = cKDTree(sampled_points)
-    dists, indices = tree.query(sampled_points, k=neighbors)
-    densities = np.array([max(dists[point_set, 1]) ** 2 for point_set in indices])
-    densities.tofile(os.path.join(output_folder, f'densities.{ext}'))
     return True
 
