@@ -6,20 +6,16 @@ import sys
 import json
 import re
 import glob
-import pickle
-import cv2
 import tqdm
 import subprocess
 import numpy as np
-from copy import deepcopy
 from PIL import Image
 from multiprocessing import Pool
 from scipy.spatial import cKDTree
-from scipy.spatial import ConvexHull
 
 sys.path.append(".")
 
-from Method.ldif.dataset import PIX3DConfig
+from Config.pix3d import PIX3DConfig
 
 # preprocess param
 del_intermediate_result = True
@@ -62,13 +58,13 @@ def read_obj(model_path, flags = ('v')):
     fid.close()
 
     if 'v' in data.keys():
-        data['v'] = np.array(data['v']).astype(np.float)
+        data['v'] = np.array(data['v']).astype(float)
 
     if 'vt' in data.keys():
-        data['vt'] = np.array(data['vt']).astype(np.float)
+        data['vt'] = np.array(data['vt']).astype(float)
 
     if 'vn' in data.keys():
-        data['vn'] = np.array(data['vn']).astype(np.float)
+        data['vn'] = np.array(data['vn']).astype(float)
 
     return data
 
