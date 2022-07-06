@@ -14,7 +14,6 @@ import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
 import torch.nn.functional as F
 
-from configs.data_config import pix3d_n_classes
 from models.modules import resnet
 from models.modules.resnet import model_urls
 from net_utils.misc import weights_init
@@ -318,11 +317,10 @@ class OccNetDecoder(nn.Module):
         return vals
 
 class LDIF_SubNet(nn.Module):
-    def __init__(self, config, optim_spec=None, n_classes=pix3d_n_classes,
+    def __init__(self, config, optim_spec=None, n_classes=9,
                  pretrained_encoder=True):
         super(LDIF_SubNet, self).__init__()
 
-        '''Optimizer parameters used in training'''
         self.optim_spec = optim_spec
 
         '''Module parameters'''
