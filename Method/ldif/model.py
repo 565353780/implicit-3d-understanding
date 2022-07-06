@@ -15,13 +15,11 @@ import torch.nn.functional as F
 
 from skimage import measure
 
-from models.modules.resnet import model_urls
-from net_utils.misc import weights_init
 from external.ldif.util import file_util, camera_util
 
 from Method.ldif.loss import LDIFLoss
 from Method.sdf import reconstruction
-from Method.resnet import resnet18_full
+from Method.resnet import resnet18_full, model_urls
 
 def sample_quadric_surface(quadric, center, samples):
     # Sample the quadric surfaces and the RBFs in world space, and composite them.
@@ -73,7 +71,6 @@ def marching_cubes(volume, mcubes_extent):
   volume = np.squeeze(volume)
   length, height, width = volume.shape
   resolution = length
-  # This function doesn't support non-cube volumes:
   assert resolution == height and resolution == width
   thresh = -0.07
   try:
@@ -81,12 +78,8 @@ def marching_cubes(volume, mcubes_extent):
     del normals
     x, y, z = [np.array(x) for x in zip(*vertices)]
     xyzw = np.stack([x, y, z, np.ones_like(x)], axis=1)
-    # Center the volume around the origin:
     xyzw += np.array(
         [[-resolution / 2.0, -resolution / 2.0, -resolution / 2.0, 0.]])
-    # This assumes the world is right handed with y up; matplotlib's renderer
-    # has z up and is left handed:
-    # Reflect across z, rotate about x, and rescale to [-0.5, 0.5].
     xyzw *= np.array([[(2.0 * mcubes_extent) / resolution,
                        (2.0 * mcubes_extent) / resolution,
                        -1.0 * (2.0 * mcubes_extent) / resolution, 1]])
@@ -102,6 +95,14 @@ def marching_cubes(volume, mcubes_extent):
         'Failed to extract mesh with error %s. Setting to unit sphere.' %
         repr(e))
     return False, trimesh.primitives.Sphere(radius=0.5)
+
+def weights_init(m):
+    classname = m.__class__.__name__
+    if classname.find('Conv') != -1:
+        m.weight.data.normal_(0.0, 0.02)
+    elif classname.find('BatchNorm') != -1:
+        m.weight.data.normal_(1.0, 0.02)
+        m.bias.data.fill_(0)
 
 class StructuredImplicit(object):
     def __init__(self, config, constant, center, radius, iparam, net=None):
@@ -124,7 +125,6 @@ class StructuredImplicit(object):
 
     @classmethod
     def from_packed_vector(cls, config, packed_vector, net):
-        """Parse an already packed vector (NOT a network activation)."""
         constant, center, radius, iparam = _unflatten(config, packed_vector)
         return cls(config, constant, center, radius, iparam, net)
 
@@ -142,7 +142,6 @@ class StructuredImplicit(object):
         return cls(config, constant, new_center, radius, iparam, net)
 
     def _tile_for_symgroups(self, elements):
-        # Tiles an input tensor along its element dimension based on symmetry
         sym_elements = elements[:, :self.sym_element_count, ...]
         elements = torch.cat([elements, sym_elements], 1)
         return elements
@@ -150,8 +149,7 @@ class StructuredImplicit(object):
     def _generate_symgroup_samples(self, samples):
         samples = samples.unsqueeze(1).expand(-1, self.element_count, -1, -1)
         sym_samples = samples[:, :self.sym_element_count].clone()
-        # sym_samples *= torch.tensor([1, 1, -1], dtype=torch.float32, device=self.device)  # reflect across the XY plane
-        sym_samples *= torch.tensor([-1, 1, 1], dtype=torch.float32, device=self.device)  # reflect across the YZ plane
+        sym_samples *= torch.tensor([-1, 1, 1], dtype=torch.float32, device=self.device)
         effective_samples = torch.cat([samples, sym_samples], 1)
         return effective_samples
 
@@ -162,17 +160,14 @@ class StructuredImplicit(object):
         lower_row = torch.tensor([0., 0., 0., 1.], device=self.device).expand(self.batch_size, self.element_count, 1, -1)
         tx = torch.cat([tx, lower_row], -2)
 
-        # Compute a rotation transformation
         rotation = camera_util.roll_pitch_yaw_to_rotation_matrices(self.radii[..., 3:6]).inverse()
         diag = 1.0 / (torch.sqrt(self.radii[..., :3] + 1e-8) + 1e-8)
         scale = torch.diag_embed(diag)
 
-        # Apply both transformations and return the transformed points.
         tx3x3 = torch.matmul(scale, rotation)
         return torch.matmul(homogenize(tx3x3), tx)
 
     def implicit_values(self, local_samples):
-        # Computes the implicit values given local input locations.
         iparams = self._tile_for_symgroups(self.iparams)
         values = self.net.eval_implicit_parameters(iparams, local_samples)
         return values
@@ -198,14 +193,6 @@ class StructuredImplicit(object):
             constants_quadrics, effective_centers, effective_radii, effective_samples
         )
 
-        # We currently have constants, weights with shape:
-        # [batch_size, element_count, sample_count, 1].
-        # We need to use the net to get a same-size grid of offsets.
-        # The input samples to the net must have shape
-        # [batch_size, element_count, sample_count, 3], while the current samples
-        # have shape [batch_size, sample_count, 3]. This is because each sample
-        # should be evaluated in the relative coordinate system of the
-        # The world2local transformations for each element. Shape [B, EC, 4, 4].
         effective_world2local = self._tile_for_symgroups(self.compute_world2local())
         local_samples = torch.matmul(F.pad(effective_samples, [0, 1], "constant", 1),
                                      effective_world2local.transpose(-1, -2))[..., :3]
@@ -347,10 +334,10 @@ class OccNetDecoder(nn.Module):
         f.close()
         return True
 
-class LDIF_SubNet(nn.Module):
+class LDIFSDF(nn.Module):
     def __init__(self, config, n_classes=9,
                  pretrained_encoder=True):
-        super(LDIF_SubNet, self).__init__()
+        super(LDIFSDF, self).__init__()
         gauss_kernel_num = 10
 
         self.config = config
@@ -379,10 +366,8 @@ class LDIF_SubNet(nn.Module):
         )
         self.decoder = OccNetDecoder(f_dim=self.implicit_parameter_length)
 
-        # initialize weight
         self.apply(weights_init)
 
-        # initialize resnet
         if pretrained_encoder:
             pretrained_dict = model_zoo.load_url(model_urls['resnet18'])
             model_dict = self.encoder.state_dict()
@@ -393,6 +378,7 @@ class LDIF_SubNet(nn.Module):
                                k in model_dict and not k.startswith('fc.')}
             model_dict.update(pretrained_dict)
             self.encoder.load_state_dict(model_dict)
+        return
 
     def eval_implicit_parameters(self, implicit_parameters, samples):
         batch_size, element_count, element_embedding_length = list(implicit_parameters.shape)
@@ -403,8 +389,56 @@ class LDIF_SubNet(nn.Module):
         vals = torch.reshape(batched_vals, [batch_size, element_count, sample_count, 1])
         return vals
 
+    def extract_mesh(self, structured_implicit, resolution=64, extent=0.75, num_samples=10000):
+        mesh = reconstruction(structured_implicit, resolution,
+                              np.array([-extent] * 3), np.array([extent] * 3),
+                              num_samples, False)
+        return mesh
+
+    def forward(self, image, size_cls, samples=None, occnet2gaps=None):
+        return_dict = {}
+
+        embedding = self.encoder(image)
+        return_dict['ldif_afeature'] = embedding
+        embedding = torch.cat([embedding, size_cls], 1)
+        structured_implicit_activations = self.mlp(embedding)
+        structured_implicit_activations = torch.reshape(
+            structured_implicit_activations, [-1, self.element_count, self.element_embedding_length])
+        return_dict['structured_implicit_activations'] = structured_implicit_activations
+
+        structured_implicit = StructuredImplicit.from_activation(
+            self.config, structured_implicit_activations, self)
+
+        return_dict['structured_implicit'] = structured_implicit.dict()
+
+        if samples is not None:
+            global_decisions, local_outputs = structured_implicit.class_at_samples(samples, True)
+            return_dict.update({'global_decisions': global_decisions,
+                                'element_centers': structured_implicit.centers})
+            return return_dict
+
+        resolution =  self.config['data'].get('marching_cube_resolution', 128)
+        mesh = self.extract_mesh(structured_implicit, extent=self.config['data']['bounding_box'],
+                                 resolution=resolution, cuda=True,
+                                 marching_cube=False)
+
+        return_dict.update({'sdf': mesh[0], 'mat': mesh[1],
+                            'element_centers': structured_implicit.centers})
+        return return_dict
+
+    def __del__(self):
+        if self._temp_folder is not None:
+            shutil.rmtree(self._temp_folder)
+        return
+
+class LDIF_SubNet(LDIFSDF):
+    def __init__(self, config, n_classes=9,
+                 pretrained_encoder=True):
+        super(LDIF_SubNet, self).__init__(config, n_classes, pretrained_encoder)
+        return
+
     def extract_mesh(self, structured_implicit, resolution=64, extent=0.75, num_samples=10000,
-                     cuda=True, marching_cube=True):
+                     cuda=True):
         if cuda:
             mesh = []
             for s in structured_implicit.unbind():
@@ -427,18 +461,12 @@ class LDIF_SubNet(nn.Module):
         else:
             mesh = reconstruction(structured_implicit, resolution,
                                   np.array([-extent] * 3), np.array([extent] * 3),
-                                  num_samples, marching_cube)
+                                  num_samples, True)
         return mesh
 
     def forward(self, image, size_cls, samples=None, occnet2gaps=None):
-        return_structured_implicit = False
-        reconstruction='mesh'
-
         return_dict = {}
 
-
-        # encoder
-        # image encoding
         embedding = self.encoder(image)
         return_dict['ldif_afeature'] = embedding
         embedding = torch.cat([embedding, size_cls], 1)
@@ -447,17 +475,11 @@ class LDIF_SubNet(nn.Module):
             structured_implicit_activations, [-1, self.element_count, self.element_embedding_length])
         return_dict['structured_implicit_activations'] = structured_implicit_activations
 
-        # SIF decoder
         structured_implicit = StructuredImplicit.from_activation(
             self.config, structured_implicit_activations, self)
 
         return_dict['structured_implicit'] = structured_implicit.dict()
 
-        # if only want structured_implicit
-        if return_structured_implicit:
-            return return_dict
-
-        # predict class or mesh
         if samples is not None:
             global_decisions, local_outputs = structured_implicit.class_at_samples(samples, True)
             return_dict.update({'global_decisions': global_decisions,
@@ -466,30 +488,21 @@ class LDIF_SubNet(nn.Module):
 
         resolution =  self.config['data'].get('marching_cube_resolution', 128)
         mesh = self.extract_mesh(structured_implicit, extent=self.config['data']['bounding_box'],
-                                 resolution=resolution, cuda=True, marching_cube=reconstruction == 'mesh')
+                                 resolution=resolution, cuda=True)
 
-        if reconstruction == 'mesh':
-            if occnet2gaps is not None:
-                mesh = [m.apply_transform(t.inverse().cpu().numpy()) if not isinstance(m, trimesh.primitives.Sphere) else m
-                        for m, t in zip(mesh, occnet2gaps)]
+        if occnet2gaps is not None:
+            mesh = [m.apply_transform(t.inverse().cpu().numpy()) if not isinstance(m, trimesh.primitives.Sphere) else m
+                    for m, t in zip(mesh, occnet2gaps)]
 
-            mesh_coordinates_results = []
-            faces = []
-            for m in mesh:
-                mesh_coordinates_results.append(
-                    torch.from_numpy(m.vertices).type(torch.float32).transpose(-1, -2).to(structured_implicit.device))
-                faces.append(torch.from_numpy(m.faces).to(structured_implicit.device) + 1)
-            return_dict.update({'mesh': mesh, 'mesh_coordinates_results': [mesh_coordinates_results, ],
-                                'faces': faces, 'element_centers': structured_implicit.centers})
-        elif reconstruction == 'sdf':
-            return_dict.update({'sdf': mesh[0], 'mat': mesh[1], 'element_centers': structured_implicit.centers})
-        else:
-            raise NotImplementedError
+        mesh_coordinates_results = []
+        faces = []
+        for m in mesh:
+            mesh_coordinates_results.append(
+                torch.from_numpy(m.vertices).type(torch.float32).transpose(-1, -2).to(structured_implicit.device))
+            faces.append(torch.from_numpy(m.faces).to(structured_implicit.device) + 1)
+        return_dict.update({'mesh': mesh, 'mesh_coordinates_results': [mesh_coordinates_results, ],
+                            'faces': faces, 'element_centers': structured_implicit.centers})
         return return_dict
-
-    def __del__(self):
-        if self._temp_folder is not None:
-            shutil.rmtree(self._temp_folder)
 
 class LDIF(nn.Module):
     def __init__(self, config, mode):
