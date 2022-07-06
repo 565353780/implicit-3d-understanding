@@ -23,7 +23,7 @@ class PreProcesser(object):
     def __init__(self, config):
         self.del_intermediate_result = True
         self.skip_done = False
-        self.processes = 18
+        self.processes = 12
 
         self.scale_norm = 0.25
         self.bbox_half = 0.7
@@ -143,19 +143,19 @@ class PIX3DPreProcesser(PreProcesser):
             shell=True)
 
         scaled_ply = output_folder + "scaled_watertight.ply"
-        os.system(f'{self.gaps_folder_path}/msh2msh {watertight_ply} {scaled_ply} -scale_by_pca -translate_by_centroid'
+        os.system(f'{self.gaps_folder_path}msh2msh {watertight_ply} {scaled_ply} -scale_by_pca -translate_by_centroid'
                   f' -scale {self.scale_norm} -debug_matrix {output_folder}/orig_to_gaps.txt')
 
         # Step 1) Generate the coarse inside/outside grid:
-        os.system(f'{self.gaps_folder_path}/msh2df {scaled_ply} {output_folder}/coarse_grid.grd'
+        os.system(f'{self.gaps_folder_path}msh2df {scaled_ply} {output_folder}/coarse_grid.grd'
                   f' -bbox {self.bbox} -border 0 -spacing {self.spacing} -estimate_sign')
 
         # Step 2) Generate the near surface points:
-        os.system(f'{self.gaps_folder_path}/msh2pts {scaled_ply} {output_folder}/nss_points.sdf'
+        os.system(f'{self.gaps_folder_path}msh2pts {scaled_ply} {output_folder}/nss_points.sdf'
                   f' -near_surface -max_distance {self.spacing} -num_points 100000 -binary_sdf')
 
         # Step 3) Generate the uniform points:
-        os.system(f'{self.gaps_folder_path}/msh2pts {scaled_ply} {output_folder}/uniform_points.sdf'
+        os.system(f'{self.gaps_folder_path}msh2pts {scaled_ply} {output_folder}/uniform_points.sdf'
                   f' -uniform_in_bbox -bbox {self.bbox} -npoints 100000 -binary_sdf')
 
         # Step 4) Generate surface points for MGNet:
