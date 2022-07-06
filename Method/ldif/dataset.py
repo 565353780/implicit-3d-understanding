@@ -10,19 +10,27 @@ import numpy as np
 from PIL import Image
 from torchvision import transforms
 from torch.utils.data import Dataset
-from configs.pix3d_config import Config
 from tqdm import tqdm
 
-from configs.data_config import pix3d_n_classes
 from external.ldif.util import gaps_util, file_util
+
+class PIX3DConfig(object):
+    def __init__(self, dataset):
+        self.dataset = dataset
+        self.root_path = './data/' + self.dataset
+        self.train_split = self.root_path + '/splits/train.json'
+        self.test_split = self.root_path + '/splits/test.json'
+        self.metadata_path = self.root_path + '/metadata'
+        self.train_test_data_path = self.root_path + '/train_test_data'
+        if dataset == 'pix3d':
+            self.metadata_file = self.metadata_path + '/pix3d.json'
+            self.classnames = ['misc',
+                               'bed', 'bookcase', 'chair', 'desk', 'sofa',
+                               'table', 'tool', 'wardrobe']
+        return
 
 class PIX3DLDIF(Dataset):
     def __init__(self, config, mode):
-        '''
-        initiate PIX3DLDIF dataset for data loading
-        :param config: config file
-        :param mode: train/val/test mode
-        '''
         self.config = config
         self.mode = mode
         if mode == 'val':
@@ -31,7 +39,7 @@ class PIX3DLDIF(Dataset):
         with open(split_file) as file:
             split = json.load(file)
 
-        config_data = Config('pix3d')
+        config_data = PIX3DConfig('pix3d')
         with open(config_data.metadata_file, 'r') as file:
             metadatas = json.load(file)
         ids = [int(os.path.basename(file).split('.')[0]) for file in split if 'flipped' not in file]
@@ -50,11 +58,9 @@ class PIX3DLDIF(Dataset):
             info['uniform_points_path'] = os.path.join(rel_folder, 'uniform_points.sdf')
             info['coarse_grid_path'] = os.path.join(rel_folder, 'coarse_grid.grd')
             info['occnet2gaps_path'] = os.path.join(rel_folder, 'orig_to_gaps.txt')
-            watertight = self.config['data'].get('watertight', self.config['model']['method'] == 'LDIF')
-            info['mesh_path'] = os.path.join(rel_folder, 'mesh_orig.ply' if watertight else 'mesh_normalized.ply')
-            ext_mgnet = 'mgn' if watertight else 'org'
-            info['gt_3dpoints_path'] = os.path.join(rel_folder, f'gt_3dpoints.{ext_mgnet}')
-            info['densities_path'] = os.path.join(rel_folder, f'densities.{ext_mgnet}')
+            info['mesh_path'] = os.path.join(rel_folder, 'mesh_orig.ply')
+            info['gt_3dpoints_path'] = os.path.join(rel_folder, 'gt_3dpoints.mgn')
+            info['densities_path'] = os.path.join(rel_folder, 'densities.mgn')
             if not all([os.path.exists(path) for path in info.values()]) :
                 skipped += 1
                 continue
@@ -76,6 +82,7 @@ class LDIF_Dataset(PIX3DLDIF):
         WIDTH_PATCH = 256
         mean = [0.485, 0.456, 0.406]
         std = [0.229, 0.224, 0.225]
+        self.class_num = 9
         if self.mode=='train':
             self.data_transforms = transforms.Compose([
                 transforms.Resize((280, 280)),
@@ -99,7 +106,7 @@ class LDIF_Dataset(PIX3DLDIF):
         image = Image.fromarray(image)
         sample['img'] = self.data_transforms(image)
 
-        cls_codes = torch.zeros(pix3d_n_classes)
+        cls_codes = torch.zeros(self.class_num)
         cls_codes[sample_info['class_id']] = 1
         sample['cls'] = cls_codes
 
