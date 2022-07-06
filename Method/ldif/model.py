@@ -317,11 +317,9 @@ class OccNetDecoder(nn.Module):
         return vals
 
 class LDIF_SubNet(nn.Module):
-    def __init__(self, config, optim_spec=None, n_classes=9,
+    def __init__(self, config, n_classes=9,
                  pretrained_encoder=True):
         super(LDIF_SubNet, self).__init__()
-
-        self.optim_spec = optim_spec
 
         '''Module parameters'''
         self.config = config
@@ -473,8 +471,7 @@ class LDIF(nn.Module):
         self.config = config
         self.mode = mode
 
-        optim_spec = self.load_optim_spec()
-        self.mesh_reconstruction = LDIF_SubNet(config, optim_spec)
+        self.mesh_reconstruction = LDIF_SubNet(config)
         self.mesh_reconstruction = nn.DataParallel(self.mesh_reconstruction)
 
         self.mesh_reconstruction_loss = LDIFLoss(1, self.config)
@@ -505,12 +502,6 @@ class LDIF(nn.Module):
                 if m._get_name().find('BatchNorm') != -1:
                     m.eval()
         return True
-
-    def load_optim_spec(self):
-        if self.mode != 'train':
-            return None
-
-        return self.config['optimizer']
 
     def forward(self, data):
         if 'uniform_samples' not in data.keys():
