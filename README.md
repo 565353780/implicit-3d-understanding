@@ -60,9 +60,11 @@ and save it to
 data/pix3d/metadata
 ```
 
+then, run
+
 ```bash
 export LIBGL_ALWAYS_INDIRECT=0
-python utils/preprocess_pix3d4ldif.py
+python Method/ldif/preprocess.py
 ```
 
 #### SUN RGB-D
