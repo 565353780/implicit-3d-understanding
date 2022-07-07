@@ -63,7 +63,6 @@ data/pix3d/metadata
 then, run
 
 ```bash
-export LIBGL_ALWAYS_INDIRECT=0
 python preprocess.py
 ```
 
