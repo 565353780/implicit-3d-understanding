@@ -44,7 +44,10 @@ class PreProcesser(object):
         mesh_path_split_list = mesh_path.split("/")
         mesh_class_name = mesh_path_split_list[-3]
         mesh_folder_name = mesh_path_split_list[-2]
-        mesh_basename = mesh_path_split_list[-1].split(".")[0]
+        mesh_file_name = mesh_path_split_list[-1]
+        mesh_extend_name = mesh_file_name.split(".")[-1]
+        mesh_extend_length = len(mesh_extend_name) + 1
+        mesh_basename = mesh_file_name[:-mesh_extend_length]
 
         output_folder = self.output_root + mesh_class_name + "/" + \
             mesh_folder_name + "." + mesh_basename + "/"
@@ -111,7 +114,14 @@ class PreProcesser(object):
         return True
 
     def processMesh(self, mesh_path):
+        if not os.path.exists(mesh_path):
+            print("[WARN][PreProcesser::processMesh]")
+            print("\t mesh [" + mesh_path + "] not exist!")
+            return False
+
         output_folder = self.make_output_folder(mesh_path)
+        print(mesh_path)
+        print(output_folder)
         mesh_name = os.path.basename(output_folder)
         if mesh_name in self.skip:
             print(f"skipping {mesh_name}")
@@ -201,6 +211,13 @@ class PIX3DPreProcesser(PreProcesser):
 
         self.mesh_folder = self.config.metadata_path + "model/"
         self.skip = ['IKEA_JULES_1.model_-108.706406967_-139.417398691']
+        return
+
+class ShapeNetPreProcesser(PreProcesser):
+    def __init__(self, config):
+        super(PIX3DPreProcesser, self).__init__(config)
+
+        self.mesh_folder = self.config.metadata_path + "model/"
         return
 
 def demo():
