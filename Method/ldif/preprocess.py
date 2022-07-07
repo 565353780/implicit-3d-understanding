@@ -188,10 +188,15 @@ class PreProcesser(object):
         return True
 
     def processAllMesh(self):
-        mesh_paths = glob.glob(self.mesh_folder + "*/*/*.obj")
+        mesh_path_list = []
+        for root, dirs, files in os.walk(self.mesh_folder):
+            for file in files:
+                if file[-4:] != ".obj":
+                    continue
+                mesh_path_list.append(root + "/" + file)
 
         with Pool(self.processes) as p:
-            r = list(tqdm.tqdm(p.imap(self.processMesh, mesh_paths), total=len(mesh_paths)))
+            r = list(tqdm.tqdm(p.imap(self.processMesh, mesh_path_list), total=len(mesh_path_list)))
         return True
 
     def process(self):
