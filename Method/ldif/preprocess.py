@@ -120,7 +120,7 @@ class PreProcesser(object):
 
     def processMesh(self, mesh_path):
         output_folder = self.make_output_folder(mesh_path)
-        if self.skip_done and os.path.exists(output_folder + 'uniform_points.sdf'):
+        if self.skip_done and os.path.exists(output_folder + 'densities.org'):
             return True
 
         normalized_obj = normalize(mesh_path, output_folder)
