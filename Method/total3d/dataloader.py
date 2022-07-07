@@ -7,7 +7,7 @@ from torch.utils.data.dataloader import default_collate
 import torch.utils.data
 import collections
 
-from Method.sun_rgbd.dataset import Total3D_Dataset
+from Method.total3d.dataset import Total3D_Dataset
 
 def recursive_convert_to_torch(elem):
     if torch.is_tensor(elem):
