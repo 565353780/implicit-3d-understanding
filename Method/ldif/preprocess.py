@@ -4,7 +4,6 @@
 import os
 import sys
 import json
-import glob
 import tqdm
 import subprocess
 import numpy as np
