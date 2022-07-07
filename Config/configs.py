@@ -4,4 +4,5 @@
 from Config.ldif import LDIF_CONFIG
 
 from Config.pix3d import PIX3DConfig
+from Config.shapenet import ShapeNetConfig
 
