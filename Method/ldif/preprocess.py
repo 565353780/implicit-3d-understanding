@@ -11,7 +11,7 @@ from PIL import Image
 from multiprocessing import Pool
 from scipy.spatial import cKDTree
 
-from Config.configs import PIX3DConfig
+from Config.configs import PIX3DConfig, ShapeNetConfig
 
 from Method.preprocess import \
     read_obj, sample_pnts_from_obj, normalize, remove_if_exists
@@ -35,13 +35,11 @@ class PreProcesser(object):
         self.spacing = self.bbox_half * 2 / 32
         self.output_root = self.config.root_path + "ldif/"
 
-        self.mesh_folder = None
-
         self.not_valid_model_list = []
         return
 
     def make_output_folder(self, mesh_path):
-        mesh_unit_path = mesh_path.split(self.mesh_folder)[1]
+        mesh_unit_path = mesh_path.split(self.config.mesh_folder)[1]
         mesh_class_name = mesh_unit_path.split("/")[0]
         output_mesh_folder_name = mesh_unit_path.split(mesh_class_name + "/")[1].replace(".obj", "").replace("/", ".")
         output_folder = self.output_root + mesh_class_name + "/" + output_mesh_folder_name + "/"
@@ -183,7 +181,7 @@ class PreProcesser(object):
 
     def processAllMesh(self):
         mesh_path_list = []
-        for root, dirs, files in os.walk(self.mesh_folder):
+        for root, dirs, files in os.walk(self.config.mesh_folder):
             for file in files:
                 if file[-4:] != ".obj":
                     continue
@@ -210,23 +208,8 @@ class PreProcesser(object):
                 print("\t\t " + path)
         return True
 
-class PIX3DPreProcesser(PreProcesser):
-    def __init__(self, config):
-        super(PIX3DPreProcesser, self).__init__(config)
-
-        self.mesh_folder = self.config.metadata_path + "model/"
-        return
-
-class ShapeNetPreProcesser(PreProcesser):
-    def __init__(self, config):
-        super(PIX3DPreProcesser, self).__init__(config)
-
-        self.mesh_folder = self.config.metadata_path + "model/"
-        return
-
 def demo():
-    config = PIX3DConfig()
-    PreProcesser = PIX3DPreProcesser
+    config = ShapeNetConfig()
 
     preprocesser = PreProcesser(config)
     preprocesser.processAllMesh()
