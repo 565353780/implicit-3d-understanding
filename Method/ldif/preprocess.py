@@ -114,14 +114,7 @@ class PreProcesser(object):
         return True
 
     def processMesh(self, mesh_path):
-        if not os.path.exists(mesh_path):
-            print("[WARN][PreProcesser::processMesh]")
-            print("\t mesh [" + mesh_path + "] not exist!")
-            return False
-
         output_folder = self.make_output_folder(mesh_path)
-        print(mesh_path)
-        print(output_folder)
         mesh_name = os.path.basename(output_folder)
         if mesh_name in self.skip:
             print(f"skipping {mesh_name}")
