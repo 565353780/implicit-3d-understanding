@@ -20,7 +20,7 @@ from Method.preprocess import \
 class PreProcesser(object):
     def __init__(self, config):
         self.del_intermediate_result = True
-        self.skip_done = False
+        self.skip_done = True
         self.processes = 12
         self.scale_norm = 0.25
         self.bbox_half = 0.7
@@ -37,7 +37,6 @@ class PreProcesser(object):
         self.output_root = self.config.root_path + "ldif/"
 
         self.mesh_folder = None
-        self.skip = []
 
         self.not_valid_model_list = []
         return
@@ -117,10 +116,6 @@ class PreProcesser(object):
 
     def processMesh(self, mesh_path):
         output_folder = self.make_output_folder(mesh_path)
-        mesh_name = os.path.basename(output_folder)
-        if mesh_name in self.skip:
-            print(f"skipping {mesh_name}")
-            return True
         if self.skip_done and os.path.exists(f'{output_folder}/uniform_points.sdf'):
             return True
 
@@ -221,7 +216,6 @@ class PIX3DPreProcesser(PreProcesser):
         super(PIX3DPreProcesser, self).__init__(config)
 
         self.mesh_folder = self.config.metadata_path + "model/"
-        self.skip = ['IKEA_JULES_1.model_-108.706406967_-139.417398691']
         return
 
 class ShapeNetPreProcesser(PreProcesser):
