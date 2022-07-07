@@ -38,6 +38,8 @@ class PreProcesser(object):
 
         self.mesh_folder = None
         self.skip = []
+
+        self.not_valid_model_list = []
         return
 
     def make_output_folder(self, mesh_path):
@@ -132,9 +134,19 @@ class PreProcesser(object):
             f'xvfb-run -a -s "-screen 0 800x600x24" meshlabserver -i {normalized_obj} -o {normalized_ply}',
             shell=True)
         watertight_ply = os.path.splitext(watertight_obj)[0] + '.ply'
-        subprocess.check_output(
-            f'xvfb-run -a -s "-screen 0 800x600x24" meshlabserver -i {watertight_obj} -o {watertight_ply}',
-            shell=True)
+
+        try:
+            subprocess.check_output(
+                f'xvfb-run -a -s "-screen 0 800x600x24" meshlabserver -i {watertight_obj} -o {watertight_ply}',
+                shell=True)
+        except:
+            self.not_valid_model_list.append(watertight_obj)
+            os.remove(normalized_obj)
+            os.remove(normalized_ply)
+            os.remove(watertight_obj)
+            print("[ERROR][PreProcesser::processMesh]")
+            print("\t watertight_obj [" + watertight_obj + "] file not valid!")
+            return False
 
         scaled_ply = output_folder + "scaled_watertight.ply"
         os.system(f'{self.gaps_folder_path}msh2msh {watertight_ply} {scaled_ply} -scale_by_pca -translate_by_centroid'
@@ -196,6 +208,12 @@ class PreProcesser(object):
             print("[ERROR][PreProcesser::process]")
             print("\t processAllMesh failed!")
             return False
+
+        if len(self.not_valid_model_list) > 0:
+            print("[WARN][PreProcesser::process]")
+            print("\t not valid model list:")
+            for path in self.not_valid_model_list:
+                print("\t\t " + path)
         return True
 
 class PIX3DPreProcesser(PreProcesser):
