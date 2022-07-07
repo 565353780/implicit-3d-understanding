@@ -38,8 +38,7 @@ class PreProcesser(object):
         return
 
     def runCMD(self, cmd):
-        subprocess.check_output(cmd, shell=True, env={"LIBGL_ALWAYS_INDIRECT": "0"})
-        return True
+        return subprocess.check_output(cmd, shell=True, env={"LIBGL_ALWAYS_INDIRECT": "0"})
 
     def make_output_folder(self, mesh_path):
         mesh_unit_path = mesh_path.split(self.config.mesh_folder)[1]
@@ -64,13 +63,11 @@ class PreProcesser(object):
     def make_watertight(self, input_path, output_folder):
         output_path = output_folder + "mesh_orig.obj"
 
-        # convert mesh to off
         off_path = os.path.splitext(output_path)[0] + '.off'
         cmd = 'xvfb-run -a -s "-screen 0 800x600x24" ' + \
             'meshlabserver ' + '-i ' + input_path + ' -o ' + off_path
         self.runCMD(cmd)
 
-        # scale mesh
         cmd = sys.executable + ' ' + self.mesh_fusion_folder_path + 'scale.py' + \
             ' --in_file ' + off_path + \
             ' --out_dir ' + output_folder + \
@@ -126,17 +123,15 @@ class PreProcesser(object):
         if self.skip_done and os.path.exists(f'{output_folder}/uniform_points.sdf'):
             return True
 
-        # Step 0) Normalize and watertight the mesh before applying all other operations.
         normalized_obj = normalize(mesh_path, output_folder)
         watertight_obj = self.make_watertight(normalized_obj, output_folder)
 
-        # conver mesh to ply
         normalized_ply = os.path.splitext(normalized_obj)[0] + '.ply'
         cmd = 'xvfb-run -a -s "-screen 0 800x600x24" ' + \
             'meshlabserver -i ' + normalized_obj + ' -o ' + normalized_ply
         self.runCMD(cmd)
-        watertight_ply = os.path.splitext(watertight_obj)[0] + '.ply'
 
+        watertight_ply = os.path.splitext(watertight_obj)[0] + '.ply'
         try:
             cmd = 'xvfb-run -a -s "-screen 0 800x600x24" ' + \
                 'meshlabserver -i ' + watertight_obj + ' -o ' + watertight_ply
@@ -159,7 +154,7 @@ class PreProcesser(object):
             ' -debug_matrix ' + output_folder + '/orig_to_gaps.txt'
         os.system(cmd)
 
-        # Step 1) Generate the coarse inside/outside grid:
+        # Generate the coarse inside/outside grid:
         cmd = self.gaps_folder_path + 'msh2df ' + \
             scaled_ply + ' ' + output_folder + '/coarse_grid.grd' + \
             ' -bbox ' + str(self.bbox) + \
@@ -168,7 +163,7 @@ class PreProcesser(object):
             ' -estimate_sign'
         os.system(cmd)
 
-        # Step 2) Generate the near surface points:
+        # Generate the near surface points:
         cmd = self.gaps_folder_path + 'msh2pts ' + \
             scaled_ply + ' ' + output_folder + '/nss_points.sdf' + \
             ' -near_surface' + \
@@ -177,7 +172,6 @@ class PreProcesser(object):
             ' -binary_sdf'
         os.system(cmd)
 
-        # Step 3) Generate the uniform points:
         cmd = self.gaps_folder_path + 'msh2pts ' + \
             scaled_ply + ' ' + output_folder + '/uniform_points.sdf' + \
             ' -uniform_in_bbox' + \
@@ -186,7 +180,7 @@ class PreProcesser(object):
             ' -binary_sdf'
         os.system(cmd)
 
-        # Step 4) Generate surface points for MGNet:
+        # Generate surface points for MGNet:
         self.process_mgnet(watertight_obj, output_folder, 'mgn', self.neighbors)
         self.process_mgnet(normalized_obj, output_folder, 'org', self.neighbors)
 
