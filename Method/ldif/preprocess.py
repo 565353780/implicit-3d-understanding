@@ -42,16 +42,11 @@ class PreProcesser(object):
         return
 
     def make_output_folder(self, mesh_path):
-        mesh_path_split_list = mesh_path.split("/")
-        mesh_class_name = mesh_path_split_list[-3]
-        mesh_folder_name = mesh_path_split_list[-2]
-        mesh_file_name = mesh_path_split_list[-1]
-        mesh_extend_name = mesh_file_name.split(".")[-1]
-        mesh_extend_length = len(mesh_extend_name) + 1
-        mesh_basename = mesh_file_name[:-mesh_extend_length]
+        mesh_unit_path = mesh_path.split(self.mesh_folder)[1]
+        mesh_class_name = mesh_unit_path.split("/")[0]
+        output_mesh_folder_name = mesh_unit_path.split(mesh_class_name + "/")[1].replace(".obj", "").replace("/", ".")
+        output_folder = self.output_root + mesh_class_name + "/" + output_mesh_folder_name + "/"
 
-        output_folder = self.output_root + mesh_class_name + "/" + \
-            mesh_folder_name + "." + mesh_basename + "/"
         os.makedirs(output_folder, exist_ok=True)
         return output_folder
 
@@ -235,7 +230,7 @@ def demo():
     PreProcesser = PIX3DPreProcesser
 
     preprocesser = PreProcesser(config)
-    preprocesser.process()
+    preprocesser.processAllMesh()
     return True
 
 if __name__ == '__main__':
