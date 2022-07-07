@@ -4,13 +4,13 @@
 import os
 import wandb
 import torch
-from tqdm import tqdm
+import horovod.torch as hvd
 from torch.optim import lr_scheduler
 
 from Config.configs import LDIF_CONFIG
 
 from Method.paths import getModelPath
-from Method.dataloaders import LDIF_dataloader
+from Method.dataloaders import LDIF_dataloader, HVD_LDIF_dataloader
 from Method.models import LDIF
 from Method.optimizers import load_optimizer, load_scheduler
 
@@ -65,6 +65,12 @@ class Trainer(BaseLoader):
 
         self.model.to(self.device)
         wandb.watch(self.model, log=None)
+        return True
+
+    def loadHVD(self):
+        self.optimizer = hvd.DistributedOptimizer(self.optimizer, named_parameters=self.model.named_parameters())
+        hvd.broadcast_parameters(self.model.state_dict(), root_rank=0)
+        hvd.broadcast_optimizer_state(self.optimizer, root_rank=0)
         return True
 
     def initEnv(self, config, dataloader, model):
@@ -149,20 +155,20 @@ class Trainer(BaseLoader):
 
         print_step = self.config['log']['print_step']
 
-        print("[INFO][Trainer::train_epoch]")
-        print("\t start train epoch", epoch, "...")
-        iter = 0
-        for data in tqdm(self.train_dataloader):
-            iter += 1
+        if hvd.rank() == 0:
+            print("[INFO][Trainer::train_epoch]")
+            print("\t start train epoch", epoch, "...")
+        for iter, data in enumerate(self.train_dataloader):
             loss = self.train_step(data)
             loss_recorder.update_loss(loss)
 
-            if (iter % print_step) == 0:
+            if (iter % print_step) == 0 and hvd.rank() == 0:
                 loss = {f'train_{k}': v for k, v in loss.items()}
                 wandb.log(loss, step=step)
                 wandb.log({'epoch': epoch}, step=step)
             step += 1
-        self.outputLoss(loss_recorder)
+        if hvd.rank() == 0:
+            self.outputLoss(loss_recorder)
         return step
 
     def val_epoch(self):
@@ -170,13 +176,15 @@ class Trainer(BaseLoader):
         loss_recorder = LossRecorder(batch_size)
         self.model.train(False)
 
-        print("[INFO][Trainer::val_epoch]")
-        print("\t start val epoch ...")
-        for data in tqdm(self.test_dataloader):
+        if hvd.rank() == 0:
+            print("[INFO][Trainer::val_epoch]")
+            print("\t start val epoch ...")
+        for data in self.test_dataloader:
             loss = self.val_step(data)
             loss_recorder.update_loss(loss)
 
-        self.outputLoss(loss_recorder)
+        if hvd.rank() == 0:
+            self.outputLoss(loss_recorder)
         return loss_recorder.loss_recorder
 
     def logWandb(self, loss_recorder, epoch, step):
@@ -198,8 +206,9 @@ class Trainer(BaseLoader):
         total_epochs = self.config['train']['epochs']
         save_checkpoint = self.config['log']['save_checkpoint']
         for epoch in range(start_epoch, total_epochs):
-            print('Epoch (' + str(epoch + 1) + '/' + str(total_epochs) + ').')
-            self.outputLr()
+            if hvd.rank() == 0:
+                print('Epoch (' + str(epoch + 1) + '/' + str(total_epochs) + ').')
+                self.outputLr()
 
             step = self.train_epoch(epoch + 1, step)
             eval_loss_recorder = self.val_epoch()
@@ -213,6 +222,9 @@ class Trainer(BaseLoader):
                 print("[ERROR][Trainer::start_train]")
                 print("\t scheduler step function not found!")
                 return False
+
+            if hvd.rank() != 0:
+                continue
 
             self.logWandb(eval_loss_recorder, epoch, step)
 
@@ -231,11 +243,15 @@ class Trainer(BaseLoader):
 
 def demo():
     config = LDIF_CONFIG
-    dataloader = LDIF_dataloader
+    dataloader = HVD_LDIF_dataloader
     model = LDIF
+
+    hvd.init()
+    torch.cuda.set_device(hvd.local_rank())
 
     trainer = Trainer()
     trainer.initEnv(config, dataloader, model)
+    trainer.loadHVD()
     trainer.train()
     return True
 
