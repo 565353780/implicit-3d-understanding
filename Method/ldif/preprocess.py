@@ -27,7 +27,6 @@ class PreProcesser(object):
 
         self.gaps_folder_path = "./external/ldif/gaps/bin/x86_64/"
         self.mesh_fusion_folder_path = "./external/mesh_fusion/"
-        self.python_bin = sys.executable
 
         self.config = config
 
@@ -37,6 +36,10 @@ class PreProcesser(object):
 
         self.not_valid_model_list = []
         return
+
+    def runCMD(self, cmd):
+        subprocess.check_output(cmd, shell=True, env={"LIBGL_ALWAYS_INDIRECT": "0"})
+        return True
 
     def make_output_folder(self, mesh_path):
         mesh_unit_path = mesh_path.split(self.config.mesh_folder)[1]
@@ -63,25 +66,37 @@ class PreProcesser(object):
 
         # convert mesh to off
         off_path = os.path.splitext(output_path)[0] + '.off'
-        subprocess.check_output(f'xvfb-run -a -s "-screen 0 800x600x24" meshlabserver -i {input_path} -o {off_path}',
-                                shell=True)
+        cmd = 'xvfb-run -a -s "-screen 0 800x600x24" ' + \
+            'meshlabserver ' + '-i ' + input_path + ' -o ' + off_path
+        self.runCMD(cmd)
 
         # scale mesh
-        subprocess.check_output(f'{self.python_bin} {self.mesh_fusion_folder_path}scale.py'
-                                f' --in_file {off_path} --out_dir {output_folder} --t_dir {output_folder} --overwrite',
-                                shell=True)
+        cmd = sys.executable + ' ' + self.mesh_fusion_folder_path + 'scale.py' + \
+            ' --in_file ' + off_path + \
+            ' --out_dir ' + output_folder + \
+            ' --t_dir ' + output_folder + \
+            ' --overwrite'
+        self.runCMD(cmd)
 
         # create depth maps
-        subprocess.check_output(f'xvfb-run -a -s "-screen 0 800x600x24" {self.python_bin} {self.mesh_fusion_folder_path}fusion.py'
-                                f' --mode=render --in_file {off_path} --out_dir {output_folder} --overwrite',
-                                shell=True)
+        cmd = 'xvfb-run -a -s "-screen 0 800x600x24" ' + \
+            sys.executable + ' ' + self.mesh_fusion_folder_path + 'fusion.py' + \
+            ' --mode=render' + \
+            ' --in_file ' + off_path + \
+            ' --out_dir ' + output_folder + \
+            ' --overwrite'
+        self.runCMD(cmd)
 
         # produce watertight mesh
         depth_path = off_path + '.h5'
         transform_path = os.path.splitext(output_path)[0] + '.npz'
-        subprocess.check_output(f'{self.python_bin} {self.mesh_fusion_folder_path}fusion.py --mode=fuse'
-                                f' --in_file {depth_path} --out_dir {output_folder} --t_dir {output_folder} --overwrite',
-                                shell=True)
+        cmd = sys.executable + ' ' + self.mesh_fusion_folder_path + 'fusion.py' + \
+            ' --mode=fuse' + \
+            ' --in_file ' + depth_path + \
+            ' --out_dir ' + output_folder + \
+            ' --t_dir ' + output_folder + \
+            ' --overwrite'
+        self.runCMD(cmd)
 
         os.remove(off_path)
         os.remove(transform_path)
@@ -117,15 +132,15 @@ class PreProcesser(object):
 
         # conver mesh to ply
         normalized_ply = os.path.splitext(normalized_obj)[0] + '.ply'
-        subprocess.check_output(
-            f'xvfb-run -a -s "-screen 0 800x600x24" meshlabserver -i {normalized_obj} -o {normalized_ply}',
-            shell=True)
+        cmd = 'xvfb-run -a -s "-screen 0 800x600x24" ' + \
+            'meshlabserver -i ' + normalized_obj + ' -o ' + normalized_ply
+        self.runCMD(cmd)
         watertight_ply = os.path.splitext(watertight_obj)[0] + '.ply'
 
         try:
-            subprocess.check_output(
-                f'xvfb-run -a -s "-screen 0 800x600x24" meshlabserver -i {watertight_obj} -o {watertight_ply}',
-                shell=True)
+            cmd = 'xvfb-run -a -s "-screen 0 800x600x24" ' + \
+                'meshlabserver -i ' + watertight_obj + ' -o ' + watertight_ply
+            self.runCMD(cmd)
         except:
             self.not_valid_model_list.append(watertight_obj)
             os.remove(normalized_obj)
@@ -136,20 +151,40 @@ class PreProcesser(object):
             return False
 
         scaled_ply = output_folder + "scaled_watertight.ply"
-        os.system(f'{self.gaps_folder_path}msh2msh {watertight_ply} {scaled_ply} -scale_by_pca -translate_by_centroid'
-                  f' -scale {self.scale_norm} -debug_matrix {output_folder}/orig_to_gaps.txt')
+        cmd = self.gaps_folder_path + 'msh2msh ' + \
+            watertight_ply + ' ' + scaled_ply + \
+            ' -scale_by_pca' + \
+            ' -translate_by_centroid' + \
+            ' -scale ' + str(self.scale_norm) + \
+            ' -debug_matrix ' + output_folder + '/orig_to_gaps.txt'
+        os.system(cmd)
 
         # Step 1) Generate the coarse inside/outside grid:
-        os.system(f'{self.gaps_folder_path}msh2df {scaled_ply} {output_folder}/coarse_grid.grd'
-                  f' -bbox {self.bbox} -border 0 -spacing {self.spacing} -estimate_sign')
+        cmd = self.gaps_folder_path + 'msh2df ' + \
+            scaled_ply + ' ' + output_folder + '/coarse_grid.grd' + \
+            ' -bbox ' + str(self.bbox) + \
+            ' -border 0' + \
+            ' -spacing ' + str(self.spacing) + \
+            ' -estimate_sign'
+        os.system(cmd)
 
         # Step 2) Generate the near surface points:
-        os.system(f'{self.gaps_folder_path}msh2pts {scaled_ply} {output_folder}/nss_points.sdf'
-                  f' -near_surface -max_distance {self.spacing} -num_points 100000 -binary_sdf')
+        cmd = self.gaps_folder_path + 'msh2pts ' + \
+            scaled_ply + ' ' + output_folder + '/nss_points.sdf' + \
+            ' -near_surface' + \
+            ' -max_distance ' + str(self.spacing) + \
+            ' -num_points 100000' + \
+            ' -binary_sdf'
+        os.system(cmd)
 
         # Step 3) Generate the uniform points:
-        os.system(f'{self.gaps_folder_path}msh2pts {scaled_ply} {output_folder}/uniform_points.sdf'
-                  f' -uniform_in_bbox -bbox {self.bbox} -npoints 100000 -binary_sdf')
+        cmd = self.gaps_folder_path + 'msh2pts ' + \
+            scaled_ply + ' ' + output_folder + '/uniform_points.sdf' + \
+            ' -uniform_in_bbox' + \
+            ' -bbox ' + str(self.bbox) + \
+            ' -npoints 100000' + \
+            ' -binary_sdf'
+        os.system(cmd)
 
         # Step 4) Generate surface points for MGNet:
         self.process_mgnet(watertight_obj, output_folder, 'mgn', self.neighbors)
