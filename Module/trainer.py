@@ -29,6 +29,9 @@ class Trainer(BaseLoader):
         return
 
     def initWandb(self):
+        if hvd.rank() != 0:
+            return True
+
         resume = True
         log_dict = self.config['log']
 
@@ -64,7 +67,8 @@ class Trainer(BaseLoader):
             self.scheduler.load_state_dict(state_dict['scheduler'])
 
         self.model.to(self.device)
-        wandb.watch(self.model, log=None)
+        if hvd.rand() == 0:
+            wandb.watch(self.model, log=None)
         return True
 
     def loadHVD(self):
@@ -164,8 +168,9 @@ class Trainer(BaseLoader):
 
             if (iter % print_step) == 0 and hvd.rank() == 0:
                 loss = {f'train_{k}': v for k, v in loss.items()}
-                wandb.log(loss, step=step)
-                wandb.log({'epoch': epoch}, step=step)
+                if hvd.rank() == 0:
+                    wandb.log(loss, step=step)
+                    wandb.log({'epoch': epoch}, step=step)
             step += 1
         if hvd.rank() == 0:
             self.outputLoss(loss_recorder)
@@ -188,6 +193,9 @@ class Trainer(BaseLoader):
         return loss_recorder.loss_recorder
 
     def logWandb(self, loss_recorder, epoch, step):
+        if hvd.rank() != 0:
+            return True
+
         loss = {f'test_{k}': v.avg for k, v in loss_recorder.items()}
         wandb.log(loss, step=step)
         wandb.log({f'lr{i}': g['lr'] for i, g in enumerate(self.optimizer.param_groups)}, step=step)
