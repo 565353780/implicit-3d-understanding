@@ -76,9 +76,9 @@ class Trainer(BaseLoader):
         return True
 
     def loadHVD(self):
-        self.optimizer = hvd.DistributedOptimizer(self.optimizer, named_parameters=self.model.named_parameters())
         hvd.broadcast_parameters(self.model.state_dict(), root_rank=0)
         hvd.broadcast_optimizer_state(self.optimizer, root_rank=0)
+        self.optimizer = hvd.DistributedOptimizer(self.optimizer, named_parameters=self.model.named_parameters())
         return True
 
     def initEnv(self, config, dataloader, model):
