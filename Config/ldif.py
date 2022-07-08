@@ -7,7 +7,7 @@ DEVICE = {
 }
 
 DATA = {
-    'batch_size': 48,
+    'batch_size': 24,
     'dataset': 'pix3d',
     'split': './data/pix3d/splits/',
     'random_nomask': 0.0,
