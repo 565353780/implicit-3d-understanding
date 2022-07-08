@@ -63,7 +63,7 @@ TEST = {
 
 LOG = {
     'project': 'LDIF',
-    'name': 'test3',
+    'name': 'test_mpi_1',
     'vis_path': 'visualization',
     'save_results': True,
     'vis_step': 100,
