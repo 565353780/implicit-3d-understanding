@@ -2,9 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
-import wandb
 import torch
-import horovod.torch as hvd
 from torch.optim import lr_scheduler
 
 from Config.configs import LDIF_CONFIG
@@ -16,6 +14,12 @@ from Method.optimizers import load_optimizer, load_scheduler
 
 from Module.loss_recorder import LossRecorder
 from Module.base_loader import BaseLoader
+
+import horovod.torch as hvd
+hvd.init()
+if hvd.rank() == 0:
+    import wandb
+torch.cuda.set_device(hvd.local_rank())
 
 class Trainer(BaseLoader):
     def __init__(self):
@@ -253,9 +257,6 @@ def demo():
     config = LDIF_CONFIG
     dataloader = HVD_LDIF_dataloader
     model = LDIF
-
-    hvd.init()
-    torch.cuda.set_device(hvd.local_rank())
 
     trainer = Trainer()
     trainer.initEnv(config, dataloader, model)
