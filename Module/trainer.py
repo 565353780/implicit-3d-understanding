@@ -71,7 +71,7 @@ class Trainer(BaseLoader):
             self.scheduler.load_state_dict(state_dict['scheduler'])
 
         self.model.to(self.device)
-        if hvd.rand() == 0:
+        if hvd.rank() == 0:
             wandb.watch(self.model, log=None)
         return True
 
