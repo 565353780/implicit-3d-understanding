@@ -31,6 +31,8 @@ pip install wandb tqdm cython pytz python-dateutil \
       trimesh scipy scikit-image shapely jellyfish \
       vtk seaborn h5py opencv-python
 
+HOROVOD_GPU_OPERATIONS=NCCL pip install --no-cache-dir horovod
+
 ./build.sh
 ```
 
