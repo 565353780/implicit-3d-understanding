@@ -3,6 +3,7 @@
 
 import os
 import torch
+from tqdm import tqdm
 from torch.optim import lr_scheduler
 
 from Config.configs import LDIF_CONFIG
@@ -166,7 +167,13 @@ class Trainer(BaseLoader):
         if hvd.rank() == 0:
             print("[INFO][Trainer::train_epoch]")
             print("\t start train epoch", epoch, "...")
-        for iter, data in enumerate(self.train_dataloader):
+
+        iter = -1
+        loader = self.train_dataloader
+        if hvd.rank() == 0:
+            loader = tqdm(self.train_dataloader)
+        for data in loader:
+            iter += 1
             loss = self.train_step(data)
             loss_recorder.update_loss(loss)
 
@@ -188,7 +195,11 @@ class Trainer(BaseLoader):
         if hvd.rank() == 0:
             print("[INFO][Trainer::val_epoch]")
             print("\t start val epoch ...")
-        for data in self.test_dataloader:
+
+        loader = self.test_dataloader
+        if hvd.rank() == 0:
+            loader = tqdm(self.test_dataloader)
+        for data in loader:
             loss = self.val_step(data)
             loss_recorder.update_loss(loss)
 
