@@ -40,13 +40,11 @@ class Trainer(BaseLoader):
         resume = True
         log_dict = self.config['log']
 
-        id = log_dict['path'].split('/')[-2]
-
         wandb.init(project=log_dict['project'],
                    config=self.config,
                    dir=log_dict['path'] + log_dict['name'] + "/",
                    name=log_dict['name'],
-                   id=id, resume=resume)
+                   resume=resume)
         wandb.summary['pid'] = os.getpid()
         wandb.summary['ppid'] = os.getppid()
         return True
