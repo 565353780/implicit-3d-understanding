@@ -45,11 +45,12 @@ class BatchedOccNetResnetLayer(nn.Module):
 
 class OccNetEncoder(nn.Module):
     def __init__(self, f_dim=32):
-        super(OccNetDecoder, self).__init__()
+        super(OccNetEncoder, self).__init__()
         self.fc1 = nn.Linear(3, f_dim)
         self.resnet = BatchedOccNetResnetLayer(f_dim=f_dim)
         self.bn = BatchedCBNLayer(f_dim=f_dim)
         self.fc2 = nn.Linear(f_dim, 1)
+        return
 
     def forward(self, embedding, samples):
         sample_embeddings = self.fc1(samples)
@@ -65,6 +66,7 @@ class OccNetDecoder(nn.Module):
         self.resnet = BatchedOccNetResnetLayer(f_dim=f_dim)
         self.bn = BatchedCBNLayer(f_dim=f_dim)
         self.fc2 = nn.Linear(f_dim, 1)
+        return
 
     def forward(self, embedding, samples):
         sample_embeddings = self.fc1(samples)
