@@ -107,7 +107,7 @@ class PreProcesser(object):
 
     def processMesh(self, mesh_path):
         output_folder = self.make_output_folder(mesh_path)
-        if self.skip_done and os.path.exists(output_folder + 'fine_grid.grd'):
+        if self.skip_done and os.path.exists(output_folder + 'uniform_points.sdf'):
             return True
 
         normalized_obj = normalize(mesh_path, output_folder)
@@ -163,14 +163,6 @@ class PreProcesser(object):
             ' -bbox ' + str(self.bbox) + \
             ' -npoints 100000' + \
             ' -binary_sdf'
-        os.system(cmd)
-
-        cmd = self.gaps_folder_path + 'msh2df ' + \
-            scaled_ply + ' ' + output_folder + '/fine_grid.grd' + \
-            ' -bbox ' + str(self.bbox) + \
-            ' -border 0' + \
-            ' -spacing ' + str(self.spacing / 2.0) + \
-            ' -estimate_sign'
         os.system(cmd)
 
         if self.del_intermediate_result:
