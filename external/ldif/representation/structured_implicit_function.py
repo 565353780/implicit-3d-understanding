@@ -100,7 +100,6 @@ class StructuredImplicit(object):
         return self._all_centers
 
     def class_at_samples(self, samples, apply_class_transfer=True):
-        # (ldif.representation.structured_implicit_function.StructuredImplicit.class_at_samples)
         effective_constants = self._tile_for_symgroups(self.constants)
         effective_centers = self._tile_for_symgroups(self.centers)
         effective_radii = self._tile_for_symgroups(self.radii)
