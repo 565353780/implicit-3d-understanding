@@ -2,11 +2,13 @@
 # -*- coding: utf-8 -*-
 
 import torch
+from tqdm import tqdm
 
 from Config.configs import LDIF_CONFIG
 
 from Method.paths import getModelPath
 from Method.models import LDIF
+from Method.dataloaders import LDIF_dataloader
 
 from Module.base_loader import BaseLoader
 
@@ -57,8 +59,14 @@ def demo():
 
     detector = Detector()
     detector.initEnv(config, model)
-    result = detector.detect(None)
-    print(result)
+
+    test_dataloader = LDIF_dataloader(config, 'test')
+    for data in tqdm(test_dataloader):
+        result = detector.detect(data)
+        print(result.keys())
+        print('encoder.shape =', result['ldif_afeature'].shape)
+        print('mlp.shape =', result['structured_implicit_activations'].shape)
+        print('sif =', result['structured_implicit'].keys())
     return True
 
 if __name__ == "__main__":
