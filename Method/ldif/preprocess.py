@@ -12,8 +12,7 @@ from multiprocessing import Pool
 
 from Config.configs import PIX3DConfig, ShapeNetConfig
 
-from Method.preprocess import \
-    read_obj, sample_pnts_from_obj, normalize, remove_if_exists
+from Method.preprocess import normalize, remove_if_exists
 
 class PreProcesser(object):
     def __init__(self, config):
@@ -108,7 +107,7 @@ class PreProcesser(object):
 
     def processMesh(self, mesh_path):
         output_folder = self.make_output_folder(mesh_path)
-        if self.skip_done and os.path.exists(output_folder + 'densities.org'):
+        if self.skip_done and os.path.exists(output_folder + 'fine_grid.grd'):
             return True
 
         normalized_obj = normalize(mesh_path, output_folder)
@@ -142,7 +141,6 @@ class PreProcesser(object):
             ' -debug_matrix ' + output_folder + '/orig_to_gaps.txt'
         os.system(cmd)
 
-        # Generate the coarse inside/outside grid:
         cmd = self.gaps_folder_path + 'msh2df ' + \
             scaled_ply + ' ' + output_folder + '/coarse_grid.grd' + \
             ' -bbox ' + str(self.bbox) + \
@@ -151,7 +149,6 @@ class PreProcesser(object):
             ' -estimate_sign'
         os.system(cmd)
 
-        # Generate the near surface points:
         cmd = self.gaps_folder_path + 'msh2pts ' + \
             scaled_ply + ' ' + output_folder + '/nss_points.sdf' + \
             ' -near_surface' + \
@@ -166,6 +163,14 @@ class PreProcesser(object):
             ' -bbox ' + str(self.bbox) + \
             ' -npoints 100000' + \
             ' -binary_sdf'
+        os.system(cmd)
+
+        cmd = self.gaps_folder_path + 'msh2df ' + \
+            scaled_ply + ' ' + output_folder + '/fine_grid.grd' + \
+            ' -bbox ' + str(self.bbox) + \
+            ' -border 0' + \
+            ' -spacing ' + str(self.spacing / 2.0) + \
+            ' -estimate_sign'
         os.system(cmd)
 
         if self.del_intermediate_result:
