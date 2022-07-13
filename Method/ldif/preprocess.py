@@ -9,7 +9,6 @@ import subprocess
 import numpy as np
 from PIL import Image
 from multiprocessing import Pool
-from scipy.spatial import cKDTree
 
 from Config.configs import PIX3DConfig, ShapeNetConfig
 
@@ -48,17 +47,6 @@ class PreProcesser(object):
 
         os.makedirs(output_folder, exist_ok=True)
         return output_folder
-
-    def process_mgnet(self, obj_path, output_folder, ext, neighbors):
-        obj_data = read_obj(obj_path, ['v', 'f'])
-        sampled_points = sample_pnts_from_obj(obj_data, 10000, mode='random')
-        sampled_points.tofile(output_folder + "gt_3dpoints." + ext)
-
-        tree = cKDTree(sampled_points)
-        dists, indices = tree.query(sampled_points, k=neighbors)
-        densities = np.array([max(dists[point_set, 1]) ** 2 for point_set in indices])
-        densities.tofile(output_folder + "densities." + ext)
-        return True
 
     def make_watertight(self, input_path, output_folder):
         output_path = output_folder + "mesh_orig.obj"
@@ -179,10 +167,6 @@ class PreProcesser(object):
             ' -npoints 100000' + \
             ' -binary_sdf'
         os.system(cmd)
-
-        # Generate surface points for MGNet:
-        self.process_mgnet(watertight_obj, output_folder, 'mgn', self.neighbors)
-        self.process_mgnet(normalized_obj, output_folder, 'org', self.neighbors)
 
         if self.del_intermediate_result:
             remove_if_exists(normalized_obj)

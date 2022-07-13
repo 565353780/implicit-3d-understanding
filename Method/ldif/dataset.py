@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import cv2
 import os
 import json
 import torch
@@ -44,10 +45,7 @@ class PIX3DLDIF(Dataset):
             info['nss_points_path'] = os.path.join(rel_folder, 'nss_points.sdf')
             info['uniform_points_path'] = os.path.join(rel_folder, 'uniform_points.sdf')
             info['coarse_grid_path'] = os.path.join(rel_folder, 'coarse_grid.grd')
-            info['occnet2gaps_path'] = os.path.join(rel_folder, 'orig_to_gaps.txt')
             info['mesh_path'] = os.path.join(rel_folder, 'mesh_orig.ply')
-            info['gt_3dpoints_path'] = os.path.join(rel_folder, 'gt_3dpoints.mgn')
-            info['densities_path'] = os.path.join(rel_folder, 'densities.mgn')
             if not all([os.path.exists(path) for path in info.values()]) :
                 skipped += 1
                 continue
@@ -98,6 +96,9 @@ class LDIF_Dataset(PIX3DLDIF):
         cls_codes = torch.zeros(self.class_num)
         cls_codes[sample_info['class_id']] = 1
         sample['cls'] = cls_codes
+
+        print("sample info =")
+        print(sample_info)
 
         if self.mode == 'test':
             sample['mesh'] = file_util.read_mesh(sample_info['mesh_path'])
