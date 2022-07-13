@@ -64,10 +64,20 @@ def demo():
     test_dataloader = LDIF_dataloader(config, 'test')
     for data in tqdm(test_dataloader):
         result = detector.detect(data)
-        print(result.keys())
-        print('encoder.shape =', result['ldif_afeature'].shape)
-        print('mlp.shape =', result['structured_implicit_activations'].shape)
-        print('sdf.shape =', result['sdf'].shape)
+
+        print("==== input ====")
+        for key, item in data.items():
+            try:
+                print(key + ".shape =", item.shape)
+            except:
+                continue
+
+        print("==== result ====")
+        for key, item in result.items():
+            try:
+                print(key + ".shape =", item.shape)
+            except:
+                continue
     return True
 
 if __name__ == "__main__":
