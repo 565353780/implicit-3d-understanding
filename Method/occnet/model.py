@@ -43,22 +43,6 @@ class BatchedOccNetResnetLayer(nn.Module):
         sample_embeddings = self.fc2(sample_embeddings)
         return init_sample_embeddings + sample_embeddings
 
-class OccNetEncoder(nn.Module):
-    def __init__(self, f_dim=32):
-        super(OccNetEncoder, self).__init__()
-        self.fc1 = nn.Linear(3, f_dim)
-        self.resnet = BatchedOccNetResnetLayer(f_dim=f_dim)
-        self.bn = BatchedCBNLayer(f_dim=f_dim)
-        self.fc2 = nn.Linear(f_dim, 1)
-        return
-
-    def forward(self, embedding, samples):
-        sample_embeddings = self.fc1(samples)
-        sample_embeddings = self.resnet(embedding, sample_embeddings)
-        sample_embeddings = self.bn(embedding, sample_embeddings)
-        vals = self.fc2(sample_embeddings)
-        return vals
-
 class OccNetDecoder(nn.Module):
     def __init__(self, f_dim=32):
         super(OccNetDecoder, self).__init__()
