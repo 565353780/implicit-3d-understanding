@@ -97,13 +97,8 @@ class LDIF_Dataset(PIX3DLDIF):
         cls_codes[sample_info['class_id']] = 1
         sample['cls'] = cls_codes
 
-        print("sample info =")
-        print(sample_info)
-
         if self.mode == 'test':
             sample['mesh'] = file_util.read_mesh(sample_info['mesh_path'])
-            occnet2gaps = file_util.read_txt_to_np(sample_info['occnet2gaps_path'])
-            sample['occnet2gaps'] = np.reshape(occnet2gaps, [4, 4])
         else:
             near_surface_samples = gaps_util.read_pts_file(sample_info['nss_points_path'])
             p_ids = np.random.choice(near_surface_samples.shape[0],
