@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import torch
 import torch.nn as nn
+
+from Method.ldif_encoder.model import LDIFEncoder
 
 class ResNetBlock(nn.Module):
     def __init__(self, num_channels, kernel_size=3, stride=1, layer=nn.Conv3d,
@@ -123,4 +126,29 @@ class ResNetEncoder(nn.Module):
                 print(f"Layer {depth}: {shape_before} --> {shape_after}")
                 self.verbose = False
         return x
+
+class CADLDIFEncoder(nn.Module):
+    def __init__(self, config, n_classes):
+        super(CADLDIFEncoder, self).__init__()
+
+        self.config = config
+
+        self.cad_encoder = ResNetEncoder(1, [16, 32, 64, 128, 512])
+
+        self.ldif_encoder = LDIFEncoder(config, n_classes)
+        return
+
+    def forward(self, grid, size_cls):
+        return_dict = {}
+
+        grid = grid.unsqueeze(0)
+
+        embedding = self.cad_encoder.forward(grid)
+
+        embedding = torch.flatten(embedding)
+        return_dict['ldif_afeature'] = embedding
+
+        structured_implicit_activations = self.ldif_encoder.forward(embedding, size_cls)
+        return_dict['structured_implicit_activations'] = structured_implicit_activations
+        return return_dict
 
