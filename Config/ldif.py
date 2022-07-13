@@ -9,7 +9,7 @@ DEVICE = {
 DATA = {
     'batch_size': 24,
     'dataset': 'pix3d',
-    'split': './data/pix3d/splits/',
+    'split': '/home/chli/scan2cad/im3d/data/pix3d/splits/',
     'random_nomask': 0.0,
     'watertight': True,
     'near_surface_samples': 1024,
@@ -63,13 +63,13 @@ TEST = {
 
 LOG = {
     'project': 'LDIF',
-    'name': '20220713_1931',
+    'name': '20220713_1940',
     'vis_path': 'visualization',
     'save_results': True,
     'vis_step': 100,
     'print_step': 50,
     'save_checkpoint': True,
-    'resume_path': './out/ldif/20220713_1931/',
+    'resume_path': './out/ldif/20220713_1940/',
     'path': './out/ldif/',
 }
 
