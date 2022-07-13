@@ -5,34 +5,23 @@ import torch
 import torch.nn as nn
 
 from Method.image_encoder.model import ImageLDIFEncoder
+from Method.cad_encoder.model import CADLDIFEncoder
 from Method.ldif_decoder.model import LDIFDecoder
 from Method.ldif.loss import LDIFLoss
-
-class ImageLDIF(nn.Module):
-    def __init__(self, config, n_classes):
-        super(ImageLDIF, self).__init__()
-
-        self.config = config
-
-        self.image_encoder = ImageLDIFEncoder(config, n_classes)
-        self.ldif_decoder = LDIFDecoder(config)
-        return
-
-    def forward(self, image, size_cls, samples=None):
-        return_dict = self.image_encoder.forward(image, size_cls)
-
-        decoder_return_dict = self.ldif_decoder.forward(return_dict['structured_implicit_activations'], samples)
-
-        return_dict.update(decoder_return_dict)
-        return return_dict
 
 class LDIF(nn.Module):
     def __init__(self, config, mode):
         super(LDIF, self).__init__()
+        n_classes = 9
+
         self.config = config
         self.mode = mode
 
-        self.mesh_reconstruction = ImageLDIF(config, 9)
+        self.image_encoder = ImageLDIFEncoder(config, n_classes)
+
+        self.cad_encoder = CADLDIFEncoder(config, n_classes)
+
+        self.ldif_decoder = LDIFDecoder(config)
 
         self.mesh_reconstruction_loss = LDIFLoss(1, self.config)
 
@@ -46,6 +35,14 @@ class LDIF(nn.Module):
                     m.eval()
         return True
 
+    def mesh_reconstruction(self, image, size_cls, samples=None):
+        return_dict = self.image_encoder.forward(image, size_cls)
+
+        decoder_return_dict = self.ldif_decoder.forward(return_dict['structured_implicit_activations'], samples)
+
+        return_dict.update(decoder_return_dict)
+        return return_dict
+
     def forward(self, data):
         if 'uniform_samples' not in data.keys():
             return self.mesh_reconstruction(data['img'], data['cls'])
@@ -55,6 +52,10 @@ class LDIF(nn.Module):
         len_near_surface = data['near_surface_class'].shape[1]
         est_data['near_surface_class'] = est_data['global_decisions'][:, :len_near_surface, ...]
         est_data['uniform_class'] = est_data['global_decisions'][:, len_near_surface:, ...]
+
+        cad_ldif_encoder = self.cad_encoder.forward(data['grid'], data['cls'])
+        cad_est_data = self.ldif_decoder.forward(cad_ldif_encoder, samples)
+        est_data['cad_est_data'] = cad_est_data
         return est_data
 
     def loss(self, est_data, gt_data):
