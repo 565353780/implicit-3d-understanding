@@ -32,7 +32,6 @@ class LDIF(nn.Module):
         self.config = config
         self.mode = mode
 
-        #  self.mesh_reconstruction = nn.DataParallel(LDIFMesh(config))
         self.mesh_reconstruction = ImageLDIF(config, 9)
 
         self.mesh_reconstruction_loss = LDIFLoss(1, self.config)
@@ -48,11 +47,8 @@ class LDIF(nn.Module):
         return True
 
     def forward(self, data):
-        print('occnet2gaps')
-        print(data.get('occnet2gaps'))
         if 'uniform_samples' not in data.keys():
-            return self.mesh_reconstruction(data['img'], data['cls'],
-                                            occnet2gaps=data.get('occnet2gaps'))
+            return self.mesh_reconstruction(data['img'], data['cls'])
 
         samples = torch.cat([data['near_surface_samples'], data['uniform_samples']], 1)
         est_data = self.mesh_reconstruction(data['img'], data['cls'], samples=samples)
