@@ -54,7 +54,7 @@ class LDIFDecoder(nn.Module):
                               num_samples, marching_cube)
         return mesh
 
-    def forward(self, structured_implicit_activations, samples=None, marching_cube=True):
+    def forward(self, structured_implicit_activations, samples=None, marching_cube=False):
         return_dict = {}
 
         structured_implicit = StructuredImplicit.from_activation(
