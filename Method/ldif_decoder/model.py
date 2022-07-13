@@ -48,13 +48,13 @@ class LDIFDecoder(nn.Module):
         vals = torch.reshape(batched_vals, [batch_size, element_count, sample_count, 1])
         return vals
 
-    def extract_mesh(self, structured_implicit, resolution=64, extent=0.75, num_samples=10000, marching_cube=False):
+    def extract_mesh(self, structured_implicit, resolution=64, extent=0.75, num_samples=10000):
         mesh = reconstruction(structured_implicit, resolution,
                               np.array([-extent] * 3), np.array([extent] * 3),
-                              num_samples, marching_cube)
+                              num_samples, False)
         return mesh
 
-    def forward(self, structured_implicit_activations, samples=None, marching_cube=False):
+    def forward(self, structured_implicit_activations, samples=None):
         return_dict = {}
 
         structured_implicit = StructuredImplicit.from_activation(
@@ -68,23 +68,9 @@ class LDIFDecoder(nn.Module):
             return return_dict
 
         resolution =  self.config['data'].get('marching_cube_resolution', 128)
-        mesh = self.extract_mesh(structured_implicit,
-                                     resolution,
-                                     self.config['data']['bounding_box'],
-                                     marching_cube=marching_cube)
+        mesh = self.extract_mesh(structured_implicit, resolution, self.config['data']['bounding_box'])
 
-        if not marching_cube:
-            return_dict.update({'sdf': mesh[0], 'mat': mesh[1],
-                                'element_centers': structured_implicit.centers})
-            return return_dict
-
-        mesh_coordinates_results = []
-        faces = []
-        for m in mesh:
-            mesh_coordinates_results.append(
-                torch.from_numpy(m.vertices).type(torch.float32).transpose(-1, -2).to(structured_implicit.device))
-            faces.append(torch.from_numpy(m.faces).to(structured_implicit.device) + 1)
-        return_dict.update({'mesh': mesh, 'mesh_coordinates_results': [mesh_coordinates_results, ],
-                            'faces': faces, 'element_centers': structured_implicit.centers})
+        return_dict.update({'sdf': mesh[0], 'mat': mesh[1],
+                            'element_centers': structured_implicit.centers})
         return return_dict
 
