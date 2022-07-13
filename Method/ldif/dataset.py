@@ -96,9 +96,7 @@ class LDIF_Dataset(PIX3DLDIF):
         cls_codes[sample_info['class_id']] = 1
         sample['cls'] = cls_codes
 
-        if self.mode == 'test':
-            sample['mesh'] = file_util.read_mesh(sample_info['mesh_path'])
-        else:
+        if self.mode != 'test':
             near_surface_samples = gaps_util.read_pts_file(sample_info['nss_points_path'])
             p_ids = np.random.choice(near_surface_samples.shape[0],
                                      self.config['data']['near_surface_samples'],
@@ -116,6 +114,7 @@ class LDIF_Dataset(PIX3DLDIF):
             sample['uniform_samples'] = uniform_samples[:, :3]
 
             sample['world2grid'], sample['grid'] = file_util.read_grd(sample_info['coarse_grid_path'])
+
         sample.update(sample_info)
         return sample
 
