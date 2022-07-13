@@ -50,7 +50,8 @@ class Detector(BaseLoader):
 
     def detect(self, data):
         data = self.to_device(data)
-        est_data = self.model(data)
+        with torch.no_grad():
+            est_data = self.model(data)
         return est_data
 
 def demo():
@@ -66,7 +67,7 @@ def demo():
         print(result.keys())
         print('encoder.shape =', result['ldif_afeature'].shape)
         print('mlp.shape =', result['structured_implicit_activations'].shape)
-        print('sif =', result['structured_implicit'].keys())
+        print('sdf.shape =', result['sdf'].shape)
     return True
 
 if __name__ == "__main__":
