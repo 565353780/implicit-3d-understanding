@@ -133,7 +133,7 @@ class CADLDIFEncoder(nn.Module):
 
         self.config = config
 
-        self.cad_encoder = ResNetEncoder(1, [16, 32, 64, 128, 512])
+        self.cad_encoder = ResNetEncoder(1, [48, 96, 192, 384, 1536])
 
         self.ldif_encoder = LDIFEncoder(config, n_classes)
         return
@@ -141,11 +141,11 @@ class CADLDIFEncoder(nn.Module):
     def forward(self, grid, size_cls):
         return_dict = {}
 
-        grid = grid.unsqueeze(0)
+        grid = grid.unsqueeze(1)
 
         embedding = self.cad_encoder.forward(grid)
 
-        embedding = torch.flatten(embedding)
+        embedding = torch.reshape(embedding, (embedding.shape[0], embedding.shape[1]))
         return_dict['ldif_afeature'] = embedding
 
         structured_implicit_activations = self.ldif_encoder.forward(embedding, size_cls)
