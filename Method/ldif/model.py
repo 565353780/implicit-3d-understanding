@@ -35,6 +35,14 @@ class LDIF(nn.Module):
                     m.eval()
         return True
 
+    def encodeImage(self, image, size_cls):
+        encode_dict = self.image_encoder.forward(image, size_cls)
+        return encode_dict['structured_implicit_activations']
+
+    def encodeCAD(self, grid, size_cls):
+        encode_dict = self.cad_encoder.forward(grid, size_cls)
+        return encode_dict['structured_implicit_activations']
+
     def mesh_reconstruction(self, image, size_cls, samples=None):
         return_dict = self.image_encoder.forward(image, size_cls)
 
