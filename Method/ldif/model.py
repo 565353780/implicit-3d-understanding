@@ -54,7 +54,9 @@ class LDIF(nn.Module):
         est_data['uniform_class'] = est_data['global_decisions'][:, len_near_surface:, ...]
 
         cad_ldif_encoder = self.cad_encoder.forward(data['grid'], data['cls'])
-        cad_est_data = self.ldif_decoder.forward(cad_ldif_encoder, samples)
+        cad_est_data = self.ldif_decoder.forward(cad_ldif_encoder['structured_implicit_activations'], samples)
+        cad_est_data['near_surface_class'] = cad_est_data['global_decisions'][:, :len_near_surface, ...]
+        cad_est_data['uniform_class'] = cad_est_data['global_decisions'][:, len_near_surface:, ...]
         est_data['cad_est_data'] = cad_est_data
         return est_data
 
