@@ -9,8 +9,10 @@ from configs.data_config import obj_cam_ratio
 from external.ldif.representation.structured_implicit_function import StructuredImplicit
 
 from pose_detect.Model.pose_net import PoseNet
+from pose_detect.Model.bdb_3d.bdb_3d_net import Bdb3DNet
 
 from pose_detect.Loss.pose_loss import PoseLoss
+from pose_detect.Loss.det_loss import DetLoss
 
 
 class TOTAL3D(BaseNetwork):
@@ -23,15 +25,15 @@ class TOTAL3D(BaseNetwork):
         super(BaseNetwork, self).__init__()
         self.cfg = cfg
 
-        self.layout_estimation = PoseNet(
-            cfg,
-            self.load_optim_spec(cfg.config,
-                                 cfg.config['model']['layout_estimation']))
+        self.layout_estimation = PoseNet(cfg)
         self.layout_estimation_loss = PoseLoss(cfg.config)
+
+        self.object_detection = Bdb3DNet(cfg)
+        self.object_detection_loss = DetLoss(cfg.config)
 
         phase_names = []
         #  phase_names += ['layout_estimation']
-        phase_names += ['object_detection']
+        #  phase_names += ['object_detection']
         phase_names += ['mesh_reconstruction']
         phase_names += ['output_adjust']
         '''load network blocks'''
@@ -39,7 +41,7 @@ class TOTAL3D(BaseNetwork):
             net_spec = cfg.config['model'][phase_name]
             method_name = net_spec['method']
             # load specific optimizer parameters
-            optim_spec = self.load_optim_spec(cfg.config, net_spec)
+            optim_spec = cfg.config['optimizer']
             subnet = MODULES.get(method_name)(cfg, optim_spec)
             self.add_module(phase_name, subnet)
             '''load corresponding loss functions'''

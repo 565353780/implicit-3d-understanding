@@ -9,10 +9,8 @@ import torch.utils.model_zoo as model_zoo
 
 class PoseNet(nn.Module):
 
-    def __init__(self, cfg, optim_spec=None):
+    def __init__(self, cfg):
         super(PoseNet, self).__init__()
-        '''Optimizer parameters used in training'''
-        self.optim_spec = optim_spec
         '''Module parameters'''
         bin = cfg.dataset_config.bins
         self.PITCH_BIN = len(bin['pitch_bin'])

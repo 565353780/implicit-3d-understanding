@@ -5,10 +5,12 @@
 from models.registers import MODULES, LOSSES
 import torch.nn as nn
 
+
 class BaseNetwork(nn.Module):
     '''
     Base Network Module for other networks
     '''
+
     def __init__(self, cfg):
         '''
         load submodules for the network.
@@ -16,19 +18,19 @@ class BaseNetwork(nn.Module):
         '''
         super(BaseNetwork, self).__init__()
         self.cfg = cfg
-
         '''load network blocks'''
         for phase_name, net_spec in cfg.config['model'].items():
             method_name = net_spec['method']
             # load specific optimizer parameters
-            optim_spec = self.load_optim_spec(cfg.config, net_spec)
+            optim_spec = cfg.config['optimizer']
             subnet = MODULES.get(method_name)(cfg.config, optim_spec)
             self.add_module(phase_name, subnet)
-
             '''load corresponding loss functions'''
-            setattr(self, phase_name + '_loss', LOSSES.get(self.cfg.config['model'][phase_name]['loss'], 'Null')(
-                self.cfg.config['model'][phase_name].get('weight', 1)))
-
+            setattr(
+                self, phase_name + '_loss',
+                LOSSES.get(self.cfg.config['model'][phase_name]['loss'],
+                           'Null')(self.cfg.config['model'][phase_name].get(
+                               'weight', 1)))
         '''freeze submodules or not'''
         self.freeze_modules(cfg)
 
@@ -67,28 +69,24 @@ class BaseNetwork(nn.Module):
         pretrained_dict = {}
         for k, v in pretrained_model.items():
             if k not in model_dict:
-                print(f"{k} will not be loaded because not exist in target model")
+                print(
+                    f"{k} will not be loaded because not exist in target model"
+                )
             elif model_dict[k].shape != v.shape:
-                print(f"{k} will not be loaded because source shape {model_dict[k].shape} != taget shape {v.shape}")
+                print(
+                    f"{k} will not be loaded because source shape {model_dict[k].shape} != taget shape {v.shape}"
+                )
             else:
                 pretrained_dict[k] = v
 
         self.cfg.log_string(
-            str(set([key.split('.')[0] for key in model_dict if key not in pretrained_dict])) + ' subnet missed.')
+            str(
+                set([
+                    key.split('.')[0]
+                    for key in model_dict if key not in pretrained_dict
+                ])) + ' subnet missed.')
         model_dict.update(pretrained_dict)
         self.load_state_dict(model_dict)
-
-    def load_optim_spec(self, config, net_spec):
-        # load specific optimizer parameters
-        if config['mode'] == 'train':
-            if 'optimizer' in net_spec.keys():
-                optim_spec = net_spec['optimizer']
-            else:
-                optim_spec = config['optimizer']  # else load default optimizer
-        else:
-            optim_spec = None
-
-        return optim_spec
 
     def forward(self, *args, **kwargs):
         ''' Performs a forward step.

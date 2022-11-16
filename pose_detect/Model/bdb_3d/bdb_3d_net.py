@@ -1,25 +1,22 @@
-# Definition of PoseNet
-# author: ynie
-# date: March, 2020
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import torch
 import torch.nn as nn
-from models.registers import MODULES
 from models.modules import resnet
 from models.modules.resnet import model_urls
 import torch.utils.model_zoo as model_zoo
-from models.total3d.modules.relation_net import RelationNet
 from configs.data_config import NYU40CLASSES
 
+from pose_detect.Model.bdb_3d.relation_net import RelationNet
 
-@MODULES.register_module
+
 class Bdb3DNet(nn.Module):
+
     def __init__(self, cfg, optim_spec=None):
         super(Bdb3DNet, self).__init__()
-
         '''Optimizer parameters used in training'''
         self.optim_spec = optim_spec
-
         '''Module parameters'''
         bin = cfg.dataset_config.bins
         self.OBJ_ORI_BIN = len(bin['ori_bin'])
@@ -60,7 +57,10 @@ class Bdb3DNet(nn.Module):
         # initialize resnet weights
         pretrained_dict = model_zoo.load_url(model_urls['resnet34'])
         model_dict = self.resnet.state_dict()
-        pretrained_dict = {k:v for k,v in pretrained_dict.items() if k in model_dict}
+        pretrained_dict = {
+            k: v
+            for k, v in pretrained_dict.items() if k in model_dict
+        }
         model_dict.update(pretrained_dict)
         self.resnet.load_state_dict(model_dict)
 
@@ -100,7 +100,8 @@ class Bdb3DNet(nn.Module):
         a_features = a_features.view(a_features.size(0), -1)
 
         # extract relational features from other objects.
-        r_features = self.relnet(a_features, g_features, split, rel_pair_counts)
+        r_features = self.relnet(a_features, g_features, split,
+                                 rel_pair_counts)
 
         a_r_features = torch.add(a_features, r_features)
 

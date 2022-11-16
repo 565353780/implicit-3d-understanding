@@ -1,6 +1,5 @@
-# Definition of PoseNet
-# author: ynie
-# date: March, 2020
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import torch
 import torch.nn as nn
@@ -9,7 +8,9 @@ import math
 
 rel_cfg = Relation_Config()
 
+
 class RelationNet(nn.Module):
+
     def __init__(self):
         super(RelationNet, self).__init__()
 
@@ -26,8 +27,7 @@ class RelationNet(nn.Module):
         # self.fc_V = nn.Linear(2048, 2048)
 
         # control scale
-        self.conv_s = nn.Conv1d(1,1,1)
-
+        self.conv_s = nn.Conv1d(1, 1, 1)
 
     def forward(self, a_features, g_features, split, rel_pair_counts):
         '''
@@ -62,12 +62,15 @@ class RelationNet(nn.Module):
 
         # divided by batch and relational group
         # Nr x num_objects_in_batch x dim
-        k_features = k_features.view(-1, rel_cfg.Nr, rel_cfg.d_k).transpose(0, 1)
-        q_features = q_features.view(-1, rel_cfg.Nr, rel_cfg.d_k).transpose(0, 1)
+        k_features = k_features.view(-1, rel_cfg.Nr,
+                                     rel_cfg.d_k).transpose(0, 1)
+        q_features = q_features.view(-1, rel_cfg.Nr,
+                                     rel_cfg.d_k).transpose(0, 1)
 
         # relational features for final weighting
         # v_features = self.fc_V(a_features).view(a_features.size(0), rel_cfg.Nr, -1).transpose(0, 1)
-        v_features = a_features.view(a_features.size(0), rel_cfg.Nr, -1).transpose(0, 1)
+        v_features = a_features.view(a_features.size(0), rel_cfg.Nr,
+                                     -1).transpose(0, 1)
 
         # to estimate appearance weight
         r_features = []
@@ -76,22 +79,31 @@ class RelationNet(nn.Module):
             sample_k_features = k_features[:, interval[0]:interval[1], :]
             sample_q_features = q_features[:, interval[0]:interval[1], :]
 
-            sample_a_weights = torch.div(torch.bmm(sample_k_features, sample_q_features.transpose(1, 2)), math.sqrt(rel_cfg.d_k))
+            sample_a_weights = torch.div(
+                torch.bmm(sample_k_features, sample_q_features.transpose(1,
+                                                                         2)),
+                math.sqrt(rel_cfg.d_k))
 
-            sample_g_weights = g_weights[:, rel_pair_counts[interval_idx]:rel_pair_counts[interval_idx + 1]]
-            sample_g_weights = sample_g_weights.view(sample_g_weights.size(0), interval[1]-interval[0], interval[1]-interval[0])
+            sample_g_weights = g_weights[:, rel_pair_counts[interval_idx]:
+                                         rel_pair_counts[interval_idx + 1]]
+            sample_g_weights = sample_g_weights.view(sample_g_weights.size(0),
+                                                     interval[1] - interval[0],
+                                                     interval[1] - interval[0])
 
-            fin_weight = self.softmax(torch.log(sample_g_weights) + sample_a_weights)
+            fin_weight = self.softmax(
+                torch.log(sample_g_weights) + sample_a_weights)
 
             # # mask the weight from objects themselves.
             # fin_weight-=torch.diag_embed(torch.diagonal(fin_weight, dim1=-2, dim2=-1))
 
             sample_v_features = v_features[:, interval[0]:interval[1], :]
 
-            sample_r_feature = torch.bmm(sample_v_features.transpose(1, 2), fin_weight)
+            sample_r_feature = torch.bmm(sample_v_features.transpose(1, 2),
+                                         fin_weight)
 
-            sample_r_feature = sample_r_feature.view(sample_r_feature.size(0) * sample_r_feature.size(1),
-                                                     sample_r_feature.size(2)).transpose(0, 1)
+            sample_r_feature = sample_r_feature.view(
+                sample_r_feature.size(0) * sample_r_feature.size(1),
+                sample_r_feature.size(2)).transpose(0, 1)
 
             r_features.append(sample_r_feature)
 

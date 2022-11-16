@@ -179,20 +179,6 @@ class SVRLoss(BaseLoss):
                 'edge_loss': 0.1 * edge_loss, 'boundary_loss': 0.5 * boundary_loss}
 
 @LOSSES.register_module
-class DetLoss(BaseLoss):
-    def __call__(self, est_data, gt_data):
-        # calculate loss
-        size_reg_loss = reg_criterion(est_data['size_reg_result'], gt_data['size_reg']) * cls_reg_ratio
-        ori_cls_loss, ori_reg_loss = cls_reg_loss(est_data['ori_cls_result'], gt_data['ori_cls'], est_data['ori_reg_result'], gt_data['ori_reg'])
-        centroid_cls_loss, centroid_reg_loss = cls_reg_loss(est_data['centroid_cls_result'], gt_data['centroid_cls'],
-                                                          est_data['centroid_reg_result'], gt_data['centroid_reg'])
-        offset_2D_loss = reg_criterion(est_data['offset_2D_result'], gt_data['offset_2D'])
-
-        return {'size_reg_loss':size_reg_loss, 'ori_cls_loss':ori_cls_loss, 'ori_reg_loss':ori_reg_loss,
-                'centroid_cls_loss':centroid_cls_loss, 'centroid_reg_loss':centroid_reg_loss,
-                'offset_2D_loss':offset_2D_loss}
-
-@LOSSES.register_module
 class ReconLoss(BaseLoss):
     def __call__(self, est_data, gt_data, extra_results):
         if gt_data['mask_flag'] == 0:
