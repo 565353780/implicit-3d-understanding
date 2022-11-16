@@ -4,13 +4,13 @@
 import torch
 from tqdm import tqdm
 
-from Config.configs import LDIF_CONFIG
+from pose_detect.Config.configs import LDIF_CONFIG
 
-from Method.paths import getModelPath
-from Method.models import LDIF
-from Method.dataloaders import LDIF_dataloader
+from pose_detect.Method.paths import getModelPath
+from pose_detect.Model.ldif.ldif import LDIF
+from pose_detect.Dataset.dataloaders import LDIF_dataloader
 
-from Module.base_loader import BaseLoader
+from pose_detect.Module.base_loader import BaseLoader
 
 class Detector(BaseLoader):
     def __init__(self):
