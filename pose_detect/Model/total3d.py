@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from models.registers import METHODS, MODULES, LOSSES
+from models.registers import MODULES, LOSSES
 from models.network import BaseNetwork
 import torch
 from torch import nn
