@@ -195,6 +195,9 @@ octave-workspace
 # compiled
 __pycache__
 
+# output
+demo/outputs
+
 # network predict
 *.obj
 *.mat
