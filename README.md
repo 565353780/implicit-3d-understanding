@@ -21,19 +21,9 @@ implicit-3d-understanding/out/total3d/20110611514267/
 ## Install
 
 ```bash
-./setup.sh
-
 conda create -n im3d python=3.7
 conda activate im3d
-pip install torch torchvision torchaudio \
-      --extra-index-url https://download.pytorch.org/whl/cu113
-pip install wandb tqdm cython pytz python-dateutil \
-      trimesh scipy scikit-image shapely jellyfish \
-      vtk seaborn h5py opencv-python
-
-HOROVOD_GPU_OPERATIONS=NCCL pip install --no-cache-dir horovod
-
-./build.sh
+./setup.sh
 ```
 
 ## Run
