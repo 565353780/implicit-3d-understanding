@@ -8,11 +8,15 @@ from torch import nn
 from configs.data_config import obj_cam_ratio
 from external.ldif.representation.structured_implicit_function import StructuredImplicit
 
+from pose_detect.Config.ldif import LDIF_CONFIG
+
 from pose_detect.Model.pose_net import PoseNet
 from pose_detect.Model.bdb_3d.bdb_3d_net import Bdb3DNet
+from pose_detect.Model.ldif.ldif import LDIF
 
 from pose_detect.Loss.pose_loss import PoseLoss
 from pose_detect.Loss.det_loss import DetLoss
+from pose_detect.Loss.ldif_loss import LDIFReconLoss
 
 
 class TOTAL3D(BaseNetwork):
@@ -31,9 +35,10 @@ class TOTAL3D(BaseNetwork):
         self.object_detection = Bdb3DNet(cfg)
         self.object_detection_loss = DetLoss(cfg.config)
 
+        #  self.mesh_reconstruction = LDIF(LDIF_CONFIG, "test")
+        #  self.mesh_reconstruction_loss = LDIFReconLoss(cfg.config)
+
         phase_names = []
-        #  phase_names += ['layout_estimation']
-        #  phase_names += ['object_detection']
         phase_names += ['mesh_reconstruction']
         phase_names += ['output_adjust']
         '''load network blocks'''

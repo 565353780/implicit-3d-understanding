@@ -25,7 +25,7 @@ class LDIF(nn.Module):
 
         self.ldif_decoder = LDIFDecoder(config)
 
-        self.mesh_reconstruction_loss = LDIFLoss(1, self.config)
+        self.mesh_reconstruction_loss = LDIFLoss(self.config)
 
         self.set_mode()
         return

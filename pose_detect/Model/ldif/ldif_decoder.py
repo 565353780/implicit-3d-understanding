@@ -6,8 +6,8 @@ import numpy as np
 import torch.nn as nn
 
 from pose_detect.Method.sdf import reconstruction
-from pose_detect.Model.sif.model import StructuredImplicit
-from pose_detect.Model.occnet.model import OccNetDecoder
+from pose_detect.Model.structured_implicit import StructuredImplicit
+from pose_detect.Model.occ_net_decoder import OccNetDecoder
 
 
 def weights_init(m):
