@@ -1,28 +1,25 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
 import torch
 from tqdm import tqdm
 from torch.optim import lr_scheduler
+from torch.utils.tensorboard import SummaryWriter
 
-from Config.configs import LDIF_CONFIG
+from pose_detect.Config.configs import LDIF_CONFIG
 
-from Method.paths import getModelPath
-from Method.dataloaders import LDIF_dataloader, HVD_LDIF_dataloader
-from Method.models import LDIF
-from Method.optimizers import load_optimizer, load_scheduler
+from pose_detect.Method.paths import getModelPath
+from pose_detect.Method.time import getCurrentTime
+from pose_detect.Dataset.dataloaders import LDIF_dataloader, HVD_LDIF_dataloader
+from pose_detect.Model.ldif.ldif import LDIF
+from pose_detect.Optimizer.optimizers import load_optimizer, load_scheduler
 
-from Module.loss_recorder import LossRecorder
-from Module.base_loader import BaseLoader
+from pose_detect.Module.loss_recorder import LossRecorder
+from pose_detect.Module.base_loader import BaseLoader
 
-import horovod.torch as hvd
-hvd.init()
-if hvd.rank() == 0:
-    import wandb
-torch.cuda.set_device(hvd.local_rank())
 
 class Trainer(BaseLoader):
+
     def __init__(self):
         super(Trainer, self).__init__()
 
@@ -31,22 +28,16 @@ class Trainer(BaseLoader):
         self.model = None
         self.optimizer = None
         self.scheduler = None
+
+        self.step = 0
+        self.loss_min = float('inf')
+        self.log_folder_name = getCurrentTime()
+        self.summary_writer = None
         return
 
-    def initWandb(self):
-        if hvd.rank() != 0:
-            return True
-
-        resume = True
-        log_dict = self.config['log']
-
-        wandb.init(project=log_dict['project'],
-                   config=self.config,
-                   dir=log_dict['path'] + log_dict['name'] + "/",
-                   name=log_dict['name'],
-                   resume=resume)
-        wandb.summary['pid'] = os.getpid()
-        wandb.summary['ppid'] = os.getppid()
+    def loadSummaryWriter(self):
+        self.summary_writer = SummaryWriter("./logs/" + self.log_folder_name +
+                                            "/")
         return True
 
     def loadDataset(self, dataloader):
@@ -68,39 +59,20 @@ class Trainer(BaseLoader):
             self.model.load_state_dict(state_dict['model'])
             self.optimizer.load_state_dict(state_dict['optimizer'])
             self.scheduler.load_state_dict(state_dict['scheduler'])
+            self.step = state_dict['step']
+            self.loss_min = state_dict['loss_min']
+            self.log_folder_name = state_dict['log_folder_name']
 
         self.model.to(self.device)
-        if hvd.rank() == 0:
-            wandb.watch(self.model, log=None)
-        return True
-
-    def loadHVD(self):
-        hvd.broadcast_parameters(self.model.state_dict(), root_rank=0)
-        hvd.broadcast_optimizer_state(self.optimizer, root_rank=0)
-        self.optimizer = hvd.DistributedOptimizer(self.optimizer, named_parameters=self.model.named_parameters())
         return True
 
     def initEnv(self, config, dataloader, model):
-        if not self.loadConfig(config):
-            print("[ERROR][Trainer::initEnv]")
-            print("\t loadConfig failed!")
-            return False
-        if not self.initWandb():
-            print("[ERROR][Trainer::initEnv]")
-            print("\t initWandb failed!")
-            return False
-        if not self.loadDevice():
-            print("[ERROR][Trainer::initEnv]")
-            print("\t loadDevice failed!")
-            return False
-        if not self.loadDataset(dataloader):
-            print("[ERROR][Trainer::initEnv]")
-            print("\t loadDevice failed!")
-            return False
-        if not self.loadModel(model):
-            print("[ERROR][Trainer::initEnv]")
-            print("\t loadModel failed!")
-            return False
+        self.loadConfig(config)
+        self.loadDevice()
+        self.loadSummaryWriter()
+
+        self.loadDataset(dataloader)
+        self.loadModel(model)
         return True
 
     def saveModel(self, suffix=None):
@@ -108,6 +80,9 @@ class Trainer(BaseLoader):
             'model': self.model.state_dict(),
             'optimizer': self.optimizer.state_dict(),
             'scheduler': self.scheduler.state_dict(),
+            'step': self.step,
+            'loss_min': self.loss_min,
+            'log_folder_name': self.log_folder_name,
         }
 
         log_dict = self.config['log']
@@ -144,7 +119,10 @@ class Trainer(BaseLoader):
         return loss
 
     def outputLr(self):
-        lrs = [self.optimizer.param_groups[i]['lr'] for i in range(len(self.optimizer.param_groups))]
+        lrs = [
+            self.optimizer.param_groups[i]['lr']
+            for i in range(len(self.optimizer.param_groups))
+        ]
         print('[Learning Rate] ' + str(lrs))
         return True
 
@@ -162,27 +140,23 @@ class Trainer(BaseLoader):
 
         print_step = self.config['log']['print_step']
 
-        if hvd.rank() == 0:
-            print("[INFO][Trainer::train_epoch]")
-            print("\t start train epoch", epoch, "...")
+        print("[INFO][Trainer::train_epoch]")
+        print("\t start train epoch", epoch, "...")
 
         iter = -1
-        loader = self.train_dataloader
-        if hvd.rank() == 0:
-            loader = tqdm(self.train_dataloader)
+        loader = tqdm(self.train_dataloader)
         for data in loader:
             iter += 1
             loss = self.train_step(data)
             loss_recorder.update_loss(loss)
 
-            if (iter % print_step) == 0 and hvd.rank() == 0:
+            if (iter % print_step) == 0:
                 loss = {f'train_{k}': v for k, v in loss.items()}
-                if hvd.rank() == 0:
-                    wandb.log(loss, step=step)
-                    wandb.log({'epoch': epoch}, step=step)
+                for loss_name, loss_value in loss.items():
+                    self.summary_writer.add_scalar(loss_name, loss_value, step)
+                self.summary_writer.add_scalar('epoch', epoch, step)
             step += 1
-        if hvd.rank() == 0:
-            self.outputLoss(loss_recorder)
+        self.outputLoss(loss_recorder)
         return step
 
     def val_epoch(self):
@@ -190,30 +164,16 @@ class Trainer(BaseLoader):
         loss_recorder = LossRecorder(batch_size)
         self.model.train(False)
 
-        if hvd.rank() == 0:
-            print("[INFO][Trainer::val_epoch]")
-            print("\t start val epoch ...")
+        print("[INFO][Trainer::val_epoch]")
+        print("\t start val epoch ...")
 
-        loader = self.test_dataloader
-        if hvd.rank() == 0:
-            loader = tqdm(self.test_dataloader)
+        loader = tqdm(self.test_dataloader)
         for data in loader:
             loss = self.val_step(data)
             loss_recorder.update_loss(loss)
 
-        if hvd.rank() == 0:
-            self.outputLoss(loss_recorder)
+        self.outputLoss(loss_recorder)
         return loss_recorder.loss_recorder
-
-    def logWandb(self, loss_recorder, epoch, step):
-        if hvd.rank() != 0:
-            return True
-
-        loss = {f'test_{k}': v.avg for k, v in loss_recorder.items()}
-        wandb.log(loss, step=step)
-        wandb.log({f'lr{i}': g['lr'] for i, g in enumerate(self.optimizer.param_groups)}, step=step)
-        wandb.log({'epoch': epoch + 1}, step=step)
-        return True
 
     def train(self):
         min_eval_loss = 1e8
@@ -221,15 +181,16 @@ class Trainer(BaseLoader):
         step = 0
 
         start_epoch = self.scheduler.last_epoch
-        if isinstance(self.scheduler, (lr_scheduler.StepLR, lr_scheduler.MultiStepLR)):
+        if isinstance(self.scheduler,
+                      (lr_scheduler.StepLR, lr_scheduler.MultiStepLR)):
             start_epoch -= 1
 
         total_epochs = self.config['train']['epochs']
         save_checkpoint = self.config['log']['save_checkpoint']
         for epoch in range(start_epoch, total_epochs):
-            if hvd.rank() == 0:
-                print('Epoch (' + str(epoch + 1) + '/' + str(total_epochs) + ').')
-                self.outputLr()
+            print('Epoch (' + str(epoch + 1) + '/' + str(total_epochs) +
+                  ').')
+            self.outputLr()
 
             step = self.train_epoch(epoch + 1, step)
             eval_loss_recorder = self.val_epoch()
@@ -237,21 +198,25 @@ class Trainer(BaseLoader):
             eval_loss = eval_loss_recorder['total'].avg
             if isinstance(self.scheduler, lr_scheduler.ReduceLROnPlateau):
                 self.scheduler.step(eval_loss)
-            elif isinstance(self.scheduler, (lr_scheduler.StepLR, lr_scheduler.MultiStepLR)):
+            elif isinstance(self.scheduler,
+                            (lr_scheduler.StepLR, lr_scheduler.MultiStepLR)):
                 self.scheduler.step()
             else:
                 print("[ERROR][Trainer::start_train]")
                 print("\t scheduler step function not found!")
                 return False
 
-            if hvd.rank() != 0:
-                continue
+            loss = {f'test_{k}': v.avg for k, v in eval_loss_recorder.items()}
+            for loss_name, loss_value in loss.items():
+                self.summary_writer.add_scalar(loss_name, loss_value, step)
 
-            self.logWandb(eval_loss_recorder, epoch, step)
+            for i, g in enumerate(self.optimizer.param_groups):
+                self.summary_writer.add_scalar('lr' + str(i), g['lr'], step)
+            self.summary_writer.add_scalar('epoch', epoch + 1, step)
 
             if save_checkpoint:
                 self.saveModel()
-            if epoch==-1 or eval_loss < min_eval_loss:
+            if epoch == -1 or eval_loss < min_eval_loss:
                 if save_checkpoint:
                     self.saveModel('best')
                 min_eval_loss = eval_loss
@@ -262,6 +227,7 @@ class Trainer(BaseLoader):
                     print("\t\t", loss_name, loss_value.avg)
         return True
 
+
 def demo():
     config = LDIF_CONFIG
     dataloader = HVD_LDIF_dataloader
@@ -269,10 +235,9 @@ def demo():
 
     trainer = Trainer()
     trainer.initEnv(config, dataloader, model)
-    trainer.loadHVD()
     trainer.train()
     return True
 
+
 if __name__ == "__main__":
     demo()
-
