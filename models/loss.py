@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from configs.data_config import cls_reg_ratio
 from external.pyTorchChamferDistance.chamfer_distance import ChamferDistance
 from models.registers import LOSSES
-from net_utils.libs import get_layout_bdb_sunrgbd, get_bdb_form_from_corners, \
+from net_utils.libs import get_bdb_form_from_corners, \
     recover_points_to_world_sys, get_rotation_matix_result, get_bdb_3d_result, \
     get_bdb_2d_result, physical_violation, recover_points_to_obj_sys
 import numpy as np
@@ -177,26 +177,6 @@ class SVRLoss(BaseLoss):
 
         return {'chamfer_loss': chamfer_loss, 'face_loss': 0.01 * face_loss,
                 'edge_loss': 0.1 * edge_loss, 'boundary_loss': 0.5 * boundary_loss}
-
-@LOSSES.register_module
-class PoseLoss(BaseLoss):
-    def __call__(self, est_data, gt_data, bins_tensor):
-        pitch_cls_loss, pitch_reg_loss = cls_reg_loss(est_data['pitch_cls_result'], gt_data['pitch_cls'], est_data['pitch_reg_result'], gt_data['pitch_reg'])
-        roll_cls_loss, roll_reg_loss = cls_reg_loss(est_data['roll_cls_result'], gt_data['roll_cls'], est_data['roll_reg_result'], gt_data['roll_reg'])
-        lo_ori_cls_loss, lo_ori_reg_loss = cls_reg_loss(est_data['lo_ori_cls_result'], gt_data['lo_ori_cls'], est_data['lo_ori_reg_result'], gt_data['lo_ori_reg'])
-        lo_centroid_loss = reg_criterion(est_data['lo_centroid_result'], gt_data['lo_centroid']) * cls_reg_ratio
-        lo_coeffs_loss = reg_criterion(est_data['lo_coeffs_result'], gt_data['lo_coeffs']) * cls_reg_ratio
-
-        lo_bdb3D_result = get_layout_bdb_sunrgbd(bins_tensor, est_data['lo_ori_reg_result'], gt_data['lo_ori_cls'], est_data['lo_centroid_result'],
-                                                 est_data['lo_coeffs_result'])
-        # layout bounding box corner loss
-        lo_corner_loss = cls_reg_ratio * reg_criterion(lo_bdb3D_result, gt_data['lo_bdb3D'])
-
-        return {'pitch_cls_loss':pitch_cls_loss, 'pitch_reg_loss':pitch_reg_loss,
-                'roll_cls_loss':roll_cls_loss, 'roll_reg_loss':roll_reg_loss,
-                'lo_ori_cls_loss':lo_ori_cls_loss, 'lo_ori_reg_loss':lo_ori_reg_loss,
-                'lo_centroid_loss':lo_centroid_loss, 'lo_coeffs_loss':lo_coeffs_loss,
-                'lo_corner_loss':lo_corner_loss}, {'lo_bdb3D_result':lo_bdb3D_result}
 
 @LOSSES.register_module
 class DetLoss(BaseLoss):

@@ -10,6 +10,8 @@ from external.ldif.representation.structured_implicit_function import Structured
 
 from pose_detect.Model.pose_net import PoseNet
 
+from pose_detect.Loss.pose_loss import PoseLoss
+
 
 class TOTAL3D(BaseNetwork):
 
@@ -21,14 +23,14 @@ class TOTAL3D(BaseNetwork):
         super(BaseNetwork, self).__init__()
         self.cfg = cfg
 
-        #  self.layout_estimation = PoseNet(
-            #  cfg,
-            #  self.load_optim_spec(cfg.config,
-                                 #  cfg.config['model']['layout_estimation']))
-        #  self.layout_estimation_loss = None
+        self.layout_estimation = PoseNet(
+            cfg,
+            self.load_optim_spec(cfg.config,
+                                 cfg.config['model']['layout_estimation']))
+        self.layout_estimation_loss = PoseLoss(cfg.config)
 
         phase_names = []
-        phase_names += ['layout_estimation']
+        #  phase_names += ['layout_estimation']
         phase_names += ['object_detection']
         phase_names += ['mesh_reconstruction']
         phase_names += ['output_adjust']
