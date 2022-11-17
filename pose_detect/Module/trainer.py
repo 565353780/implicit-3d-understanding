@@ -10,7 +10,7 @@ from pose_detect.Config.configs import LDIF_CONFIG
 
 from pose_detect.Method.paths import getModelPath
 from pose_detect.Method.time import getCurrentTime
-from pose_detect.Dataset.dataloaders import LDIF_dataloader, HVD_LDIF_dataloader
+from pose_detect.Dataset.dataloaders import LDIF_dataloader
 from pose_detect.Model.ldif.ldif import LDIF
 from pose_detect.Optimizer.optimizers import load_optimizer, load_scheduler
 
@@ -133,7 +133,7 @@ class Trainer(BaseLoader):
         print('=' * 10)
         return True
 
-    def train_epoch(self, epoch, step):
+    def train_epoch(self, epoch):
         batch_size = self.config['train']['batch_size']
         loss_recorder = LossRecorder(batch_size)
         self.model.train(True)
@@ -151,13 +151,13 @@ class Trainer(BaseLoader):
             loss_recorder.update_loss(loss)
 
             if (iter % print_step) == 0:
-                loss = {f'train_{k}': v for k, v in loss.items()}
                 for loss_name, loss_value in loss.items():
-                    self.summary_writer.add_scalar(loss_name, loss_value, step)
-                self.summary_writer.add_scalar('epoch', epoch, step)
-            step += 1
+                    self.summary_writer.add_scalar('train/' + loss_name,
+                                                   loss_value, self.step)
+                self.summary_writer.add_scalar('epoch', epoch, self.step)
+            self.step += 1
         self.outputLoss(loss_recorder)
-        return step
+        return True
 
     def val_epoch(self):
         batch_size = self.config['val']['batch_size']
@@ -178,7 +178,6 @@ class Trainer(BaseLoader):
     def train(self):
         min_eval_loss = 1e8
         epoch = 0
-        step = 0
 
         start_epoch = self.scheduler.last_epoch
         if isinstance(self.scheduler,
@@ -188,11 +187,10 @@ class Trainer(BaseLoader):
         total_epochs = self.config['train']['epochs']
         save_checkpoint = self.config['log']['save_checkpoint']
         for epoch in range(start_epoch, total_epochs):
-            print('Epoch (' + str(epoch + 1) + '/' + str(total_epochs) +
-                  ').')
+            print('Epoch (' + str(epoch + 1) + '/' + str(total_epochs) + ').')
             self.outputLr()
 
-            step = self.train_epoch(epoch + 1, step)
+            self.train_epoch(epoch + 1)
             eval_loss_recorder = self.val_epoch()
 
             eval_loss = eval_loss_recorder['total'].avg
@@ -206,13 +204,14 @@ class Trainer(BaseLoader):
                 print("\t scheduler step function not found!")
                 return False
 
-            loss = {f'test_{k}': v.avg for k, v in eval_loss_recorder.items()}
-            for loss_name, loss_value in loss.items():
-                self.summary_writer.add_scalar(loss_name, loss_value, step)
+            for loss_name, loss_value in eval_loss_recorder.items():
+                self.summary_writer.add_scalar('test/' + loss_name, loss_value,
+                                               self.step)
 
             for i, g in enumerate(self.optimizer.param_groups):
-                self.summary_writer.add_scalar('lr' + str(i), g['lr'], step)
-            self.summary_writer.add_scalar('epoch', epoch + 1, step)
+                self.summary_writer.add_scalar('lr/lr' + str(i), g['lr'],
+                                               self.step)
+            self.summary_writer.add_scalar('epoch', epoch + 1, self.step)
 
             if save_checkpoint:
                 self.saveModel()
@@ -223,14 +222,13 @@ class Trainer(BaseLoader):
                 print("[INFO][Trainer::train]")
                 print("\t Best VAL Loss")
                 for loss_name, loss_value in eval_loss_recorder.items():
-                    wandb.summary[f'best_test_{loss_name}'] = loss_value.avg
                     print("\t\t", loss_name, loss_value.avg)
         return True
 
 
 def demo():
     config = LDIF_CONFIG
-    dataloader = HVD_LDIF_dataloader
+    dataloader = LDIF_dataloader
     model = LDIF
 
     trainer = Trainer()

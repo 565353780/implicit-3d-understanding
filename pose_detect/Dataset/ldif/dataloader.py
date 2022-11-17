@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 
 from torch.utils.data import DataLoader
-from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.dataloader import default_collate
 
 from pose_detect.Dataset.ldif.dataset import LDIF_Dataset
+
 
 def LDIF_collate_fn(batch):
     """
@@ -21,11 +21,13 @@ def LDIF_collate_fn(batch):
 
     for key in batch[0]:
         try:
-            collated_batch[key] = default_collate([elem[key] for elem in batch])
+            collated_batch[key] = default_collate(
+                [elem[key] for elem in batch])
         except TypeError:
             collated_batch[key] = [elem[key] for elem in batch]
 
     return collated_batch
+
 
 def LDIF_dataloader(config, mode='train'):
     dataloader = DataLoader(dataset=LDIF_Dataset(config, mode),
@@ -34,16 +36,3 @@ def LDIF_dataloader(config, mode='train'):
                             shuffle=(mode == 'train'),
                             collate_fn=LDIF_collate_fn)
     return dataloader
-
-def HVD_LDIF_dataloader(config, mode='train'):
-    dataset = LDIF_Dataset(config, mode)
-    #FIXME: is sampler needed?
-    sampler = DistributedSampler(dataset, num_replicas=1, rank=1)
-
-    dataloader = DataLoader(dataset=dataset,
-                            num_workers=config['device']['num_workers'],
-                            batch_size=config[mode]['batch_size'],
-                            collate_fn=LDIF_collate_fn,
-                            sampler=sampler)
-    return dataloader
-
