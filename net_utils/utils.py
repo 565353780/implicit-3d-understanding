@@ -15,10 +15,12 @@ from models import method_paths
 from datetime import datetime, timedelta
 from collections import defaultdict
 
+
 class CheckpointIO(object):
     '''
     load, save, resume network weights.
     '''
+
     def __init__(self, cfg, **kwargs):
         '''
         initialize model and optimizer.
@@ -69,7 +71,8 @@ class CheckpointIO(object):
         else:
             filename = self.saved_filename.replace('last', suffix)
 
-        torch.save(outdict, os.path.join(self.cfg.config['log']['path'], filename))
+        torch.save(outdict,
+                   os.path.join(self.cfg.config['log']['path'], filename))
 
     def load(self, filename, *domain):
         '''
@@ -111,7 +114,9 @@ class CheckpointIO(object):
 
         for weight_path in weight_paths:
             if not os.path.exists(weight_path):
-                self.cfg.log_string('Warning: finetune failed: the weight path %s is invalid. Begin to train from scratch.' % (weight_path))
+                self.cfg.log_string(
+                    'Warning: finetune failed: the weight path %s is invalid. Begin to train from scratch.'
+                    % (weight_path))
             else:
                 self.load(weight_path, 'net')
                 self.cfg.log_string('Weights for finetuning loaded.')
@@ -124,7 +129,9 @@ class CheckpointIO(object):
         weight_path = self.cfg.config['weight']
 
         if not os.path.exists(weight_path):
-            self.cfg.log_string('Warning: resume failed: No checkpoint available. Begin to train from scratch.')
+            self.cfg.log_string(
+                'Warning: resume failed: No checkpoint available. Begin to train from scratch.'
+            )
         else:
             self.load(weight_path)
             self.cfg.log_string(f'Checkpoint {weight_path} resumed.')
@@ -139,6 +146,26 @@ class CheckpointIO(object):
         if os.path.exists(filename):
             self.cfg.log_string('Loading checkpoint from %s.' % (filename))
             checkpoint = torch.load(filename)
+            # FIXME: tmp load model and change params to new model
+            for key in list(checkpoint['net'].keys()):
+                if 'mesh_reconstruction.module.encoder.' in key:
+                    new_key = key.replace(
+                        'mesh_reconstruction.module.encoder.',
+                        'mesh_reconstruction.module.image_encoder.image_encoder.encoder.')
+                    checkpoint['net'][new_key] = checkpoint['net'][key]
+                    del checkpoint['net'][key]
+                if 'mesh_reconstruction.module.mlp.' in key:
+                    new_key = key.replace(
+                        'mesh_reconstruction.module.mlp.',
+                        'mesh_reconstruction.module.image_encoder.ldif_encoder.mlp.')
+                    checkpoint['net'][new_key] = checkpoint['net'][key]
+                    del checkpoint['net'][key]
+                if 'mesh_reconstruction.module.decoder.' in key:
+                    new_key = key.replace(
+                        'mesh_reconstruction.module.decoder.',
+                        'mesh_reconstruction.module.ldif_decoder.decoder.')
+                    checkpoint['net'][new_key] = checkpoint['net'][key]
+                    del checkpoint['net'][key]
             scalars = self.parse_state_dict(checkpoint, *domain)
             return scalars
         else:
@@ -177,17 +204,24 @@ class CheckpointIO(object):
                 else:
                     self._module_dict.update({key: checkpoint[key]})
             else:
-                self.cfg.log_string('Warning: Could not find %s in checkpoint!' % key)
+                self.cfg.log_string(
+                    'Warning: Could not find %s in checkpoint!' % key)
 
         if not domain:
             # remaining weights in state_dict that not found in our models.
-            scalars = {k:v for k,v in checkpoint.items() if k not in self._module_dict}
+            scalars = {
+                k: v
+                for k, v in checkpoint.items() if k not in self._module_dict
+            }
             if scalars:
-                self.cfg.log_string('Warning: the remaining modules %s in checkpoint are not found in our current setting.' % (scalars.keys()))
+                self.cfg.log_string(
+                    'Warning: the remaining modules %s in checkpoint are not found in our current setting.'
+                    % (scalars.keys()))
         else:
             scalars = {}
 
         return scalars
+
 
 def initiate_environment(config):
     '''
@@ -201,6 +235,7 @@ def initiate_environment(config):
     random.seed(config['seed'])
     torch.backends.cudnn.enabled = True
     torch.backends.cudnn.benchmark = True
+
 
 def load_device(cfg):
     '''
@@ -216,6 +251,7 @@ def load_device(cfg):
         cfg.log_string('CPU mode is on.')
         return torch.device("cpu")
 
+
 def load_model(cfg, device):
     '''
     load specific network from configuration file
@@ -224,11 +260,14 @@ def load_model(cfg, device):
     :return:
     '''
     if cfg.config['method'] not in METHODS.module_dict:
-        cfg.log_string('The method %s is not defined, please check the correct name.' % (cfg.config['method']))
+        cfg.log_string(
+            'The method %s is not defined, please check the correct name.' %
+            (cfg.config['method']))
         cfg.log_string('Exit now.')
         sys.exit(0)
 
     return METHODS.get(cfg.config['method'])(cfg).to(device)
+
 
 def load_trainer(cfg, net, optimizer, device):
     '''
@@ -239,11 +278,10 @@ def load_trainer(cfg, net, optimizer, device):
     :param device: torch.device
     :return:
     '''
-    trainer = method_paths[cfg.config['method']].config.get_trainer(cfg=cfg,
-                                                                    net=net,
-                                                                    optimizer=optimizer,
-                                                                    device=device)
+    trainer = method_paths[cfg.config['method']].config.get_trainer(
+        cfg=cfg, net=net, optimizer=optimizer, device=device)
     return trainer
+
 
 def load_tester(cfg, net, device):
     '''
@@ -253,10 +291,10 @@ def load_tester(cfg, net, device):
     :param device: torch.device
     :return:
     '''
-    tester = method_paths[cfg.config['method']].config.get_tester(cfg=cfg,
-                                                                  net=net,
-                                                                  device=device)
+    tester = method_paths[cfg.config['method']].config.get_tester(
+        cfg=cfg, net=net, device=device)
     return tester
+
 
 def load_dataloader(config, mode):
     '''
@@ -265,14 +303,16 @@ def load_dataloader(config, mode):
     :param mode: 'train', 'val' or 'test'.
     :return:
     '''
-    dataloader = method_paths[config['method']].config.get_dataloader(config=config,
-                                                                      mode=mode)
+    dataloader = method_paths[config['method']].config.get_dataloader(
+        config=config, mode=mode)
     return dataloader
+
 
 class AverageMeter(object):
     '''
     Computes ans stores the average and current value
     '''
+
     def __init__(self):
         self.reset()
 
@@ -285,8 +325,8 @@ class AverageMeter(object):
 
     def update(self, val, n=1, class_name=None):
         if not isinstance(val, list):
-            self.sum += val * n # accumulated sum, n = batch_size
-            self.count += n # accumulated count
+            self.sum += val * n  # accumulated sum, n = batch_size
+            self.count += n  # accumulated count
             self.val += [val] * n  # history value
         else:
             self.sum += sum(val)
@@ -297,7 +337,9 @@ class AverageMeter(object):
             for k, v in zip(class_name, val):
                 self.cls[k].update(v, class_name=k)
 
+
 class LossRecorder(object):
+
     def __init__(self, batch_size=1):
         '''
         Log loss data
@@ -321,11 +363,13 @@ class LossRecorder(object):
                 self._loss_recorder[key] = AverageMeter()
             self._loss_recorder[key].update(item, self._batch_size, class_name)
 
+
 class ETA:
+
     def __init__(self, smooth=0.99, ignore_first=False):
         self.tic = datetime.now()
         self.smooth = smooth
-        self.ignore_first=ignore_first
+        self.ignore_first = ignore_first
         self.speed = 0
         self.eta = None
 
@@ -337,7 +381,8 @@ class ETA:
             return None
         else:
             if self.speed > 0:
-                speed = self.smooth * timedelta(seconds=self.speed) + (1 - self.smooth) * (toc - self.tic)
+                speed = self.smooth * timedelta(
+                    seconds=self.speed) + (1 - self.smooth) * (toc - self.tic)
             else:
                 speed = toc - self.tic
             self.tic = toc
