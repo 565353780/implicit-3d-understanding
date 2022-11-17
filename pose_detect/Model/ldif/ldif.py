@@ -77,6 +77,7 @@ class LDIF(nn.Module):
         cad_est_data['uniform_class'] = cad_est_data[
             'global_decisions'][:, len_near_surface:, ...]
         est_data['cad_est_data'] = cad_est_data
+
         return est_data
 
     def loss(self, est_data, gt_data):
