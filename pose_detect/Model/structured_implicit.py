@@ -5,6 +5,7 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 
+from external.ldif.util import file_util
 
 def roll_pitch_yaw_to_rotation_matrices(roll_pitch_yaw):
     cosines = torch.cos(roll_pitch_yaw)
@@ -201,6 +202,25 @@ class StructuredImplicit(object):
             self._analytic_code = torch.cat(
                 [self.constants, self.centers, self.radii], -1)
         return self._analytic_code
+
+    def savetxt(self, path):
+        assert self.vector.shape[0] == 1
+        sif_vector = self.vector.squeeze().cpu().numpy()
+        sif_vector[:, 4:7] = np.sqrt(np.maximum(sif_vector[:, 4:7], 0))
+        out = 'SIF\n%i %i %i\n' % (self.element_count, 0,
+                                   self.implicit_parameter_length)
+        for row_idx in range(self.element_count):
+            row = ' '.join(10 * ['%.9g']) % tuple(
+                sif_vector[row_idx, :10].tolist())
+            symmetry = int(row_idx < self.sym_element_count)
+            row += ' %i' % symmetry
+            implicit_params = ' '.join(
+                self.implicit_parameter_length * ['%.9g']) % (tuple(
+                    sif_vector[row_idx, 10:].tolist()))
+            row += ' ' + implicit_params
+            row += '\n'
+            out += row
+        file_util.writetxt(path, out)
 
     def unbind(self):
         return [

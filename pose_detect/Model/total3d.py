@@ -39,7 +39,6 @@ class TOTAL3D(BaseNetwork):
         self.mesh_reconstruction_loss = LDIFReconLoss(cfg.config)
 
         phase_names = []
-        #  phase_names += ['mesh_reconstruction']
         phase_names += ['output_adjust']
         '''load network blocks'''
         for phase_name in phase_names:

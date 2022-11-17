@@ -2,8 +2,10 @@
 # -*- coding: utf-8 -*-
 
 import torch
+import struct
 import torch.nn as nn
 
+from external.ldif.util import file_util
 
 class BatchedCBNLayer(nn.Module):
 
@@ -65,3 +67,38 @@ class OccNetDecoder(nn.Module):
         sample_embeddings = self.bn(embedding, sample_embeddings)
         vals = self.fc2(sample_embeddings)
         return vals
+
+    def write_occnet_file(self, path):
+        """Serializes an occnet network and writes it to disk."""
+        f = file_util.open_file(path, 'wb')
+
+        def write_fc_layer(layer):
+            weights = layer.weight.t().cpu().numpy()
+            biases = layer.bias.cpu().numpy()
+            f.write(weights.astype('f').tostring())
+            f.write(biases.astype('f').tostring())
+
+        def write_cbn_layer(layer):
+            write_fc_layer(layer.fc_beta)
+            write_fc_layer(layer.fc_gamma)
+            running_mean = layer.running_mean.item()
+            running_var = layer.running_var.item()
+            f.write(struct.pack('ff', running_mean, running_var))
+
+        # write_header
+        f.write(struct.pack('ii', 1, self.fc1.out_features))
+        # write_input_layer
+        write_fc_layer(self.fc1)
+        # write_resnet
+        write_cbn_layer(self.resnet.bn1)
+        write_fc_layer(self.resnet.fc1)
+        write_cbn_layer(self.resnet.bn2)
+        write_fc_layer(self.resnet.fc2)
+        # write_cbn_layer
+        write_cbn_layer(self.bn)
+        # write_activation_layer
+        weights = self.fc2.weight.t().cpu().numpy()
+        bias = self.fc2.bias.data.item()
+        f.write(weights.astype('f').tostring())
+        f.write(struct.pack('f', bias))
+        f.close()

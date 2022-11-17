@@ -1,9 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
 import torch
+import shutil
+import tempfile
+import subprocess
 import numpy as np
 import torch.nn as nn
+
+from external.ldif.util import file_util
+from external.ldif.inference import extract_mesh
 
 from pose_detect.Method.sdf import reconstruction
 from pose_detect.Model.structured_implicit import StructuredImplicit
@@ -43,6 +50,8 @@ class LDIFDecoder(nn.Module):
         self.decoder = OccNetDecoder(f_dim=self.implicit_parameter_length)
 
         self.apply(weights_init)
+
+        self._temp_folder = None
         return
 
     def eval_implicit_parameters(self, implicit_parameters, samples):
@@ -64,9 +73,33 @@ class LDIFDecoder(nn.Module):
                      resolution=64,
                      extent=0.75,
                      num_samples=10000):
-        mesh = reconstruction(structured_implicit, resolution,
-                              np.array([-extent] * 3), np.array([extent] * 3),
-                              num_samples, False)
+        cuda = True
+        if cuda:
+            mesh = []
+            for s in structured_implicit.unbind():
+                if self._temp_folder is None:
+                    self._temp_folder = tempfile.mktemp(dir='/dev/shm')
+                    os.makedirs(self._temp_folder)
+                    self.decoder.write_occnet_file(
+                        os.path.join(self._temp_folder, 'serialized.occnet'))
+                    shutil.copy('./external/ldif/ldif2mesh/ldif2mesh',
+                                self._temp_folder)
+                si_path = os.path.join(self._temp_folder, 'ldif.txt')
+                grd_path = os.path.join(self._temp_folder, 'grid.grd')
+
+                s.savetxt(si_path)
+                cmd = (
+                    f"{os.path.join(self._temp_folder, 'ldif2mesh')} {si_path}"
+                    f" {os.path.join(self._temp_folder, 'serialized.occnet')}"
+                    f' {grd_path} -resolution {resolution} -extent {extent}')
+                subprocess.check_output(cmd, shell=True)
+                _, volume = file_util.read_grd(grd_path)
+                _, m = extract_mesh.marching_cubes(volume, extent)
+                mesh.append(m)
+        else:
+            mesh = reconstruction(structured_implicit, resolution,
+                                  np.array([-extent] * 3),
+                                  np.array([extent] * 3), num_samples, False)
         return mesh
 
     def forward(self, structured_implicit_activations, samples=None):
@@ -88,6 +121,27 @@ class LDIFDecoder(nn.Module):
         resolution = self.config['data'].get('marching_cube_resolution', 128)
         mesh = self.extract_mesh(structured_implicit, resolution,
                                  self.config['data']['bounding_box'])
+
+        mesh_coordinates_results = []
+        faces = []
+        for m in mesh:
+            mesh_coordinates_results.append(
+                torch.from_numpy(m.vertices).type(torch.float32).transpose(
+                    -1, -2).to(structured_implicit.device))
+            faces.append(
+                torch.from_numpy(m.faces).to(structured_implicit.device) + 1)
+
+        return_dict.update({
+            'mesh':
+            mesh,
+            'mesh_coordinates_results': [
+                mesh_coordinates_results,
+            ],
+            'faces':
+            faces,
+            'element_centers':
+            structured_implicit.centers
+        })
 
         return_dict.update({
             'sdf': mesh[0],
