@@ -63,13 +63,13 @@ TEST = {
 
 LOG = {
     'project': 'LDIF',
-    'name': '20220714_1237',
+    'name': 'test2',
     'vis_path': 'visualization',
     'save_results': True,
     'vis_step': 100,
     'print_step': 50,
     'save_checkpoint': True,
-    'resume_path': './out/ldif/20220714_1237/',
+    'resume_path': './out/ldif/test2/',
     'path': './out/ldif/',
 }
 
