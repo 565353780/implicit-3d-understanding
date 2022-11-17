@@ -146,6 +146,7 @@ class CheckpointIO(object):
         if os.path.exists(filename):
             self.cfg.log_string('Loading checkpoint from %s.' % (filename))
             checkpoint = torch.load(filename)
+
             # FIXME: tmp load model and change params to new model
             for key in list(checkpoint['net'].keys()):
                 if 'mesh_reconstruction.module.encoder.' in key:
@@ -166,6 +167,7 @@ class CheckpointIO(object):
                         'mesh_reconstruction.module.ldif_decoder.decoder.')
                     checkpoint['net'][new_key] = checkpoint['net'][key]
                     del checkpoint['net'][key]
+
             scalars = self.parse_state_dict(checkpoint, *domain)
             return scalars
         else:
