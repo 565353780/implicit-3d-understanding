@@ -197,6 +197,7 @@ __pycache__
 
 # output
 demo/outputs
+logs
 
 # network predict
 *.obj
