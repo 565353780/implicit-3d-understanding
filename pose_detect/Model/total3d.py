@@ -35,11 +35,11 @@ class TOTAL3D(BaseNetwork):
         self.object_detection = Bdb3DNet(cfg)
         self.object_detection_loss = DetLoss(cfg.config)
 
-        #  self.mesh_reconstruction = LDIF(LDIF_CONFIG, "test")
-        #  self.mesh_reconstruction_loss = LDIFReconLoss(cfg.config)
+        self.mesh_reconstruction = LDIF(LDIF_CONFIG, "test")
+        self.mesh_reconstruction_loss = LDIFReconLoss(cfg.config)
 
         phase_names = []
-        phase_names += ['mesh_reconstruction']
+        #  phase_names += ['mesh_reconstruction']
         phase_names += ['output_adjust']
         '''load network blocks'''
         for phase_name in phase_names:
@@ -55,40 +55,24 @@ class TOTAL3D(BaseNetwork):
                 LOSSES.get(self.cfg.config['model'][phase_name]['loss'],
                            'Null')(self.cfg.config['model'][phase_name].get(
                                'weight', 1), cfg.config))
-        '''Add joint loss'''
+
         setattr(self, 'joint_loss', LOSSES.get('JointLoss', 'Null')(1))
-        '''Multi-GPU setting'''
-        # Note that for object_detection, we should extract relational features, thus it does not support parallel training.
-        if cfg.config[cfg.config['mode']]['phase'] in [
-                'layout_estimation', 'joint'
-        ]:
-            self.layout_estimation = nn.DataParallel(self.layout_estimation)
-        if cfg.config[cfg.config['mode']]['phase'] in ['joint']:
-            self.mesh_reconstruction = nn.DataParallel(
-                self.mesh_reconstruction)
-        '''freeze submodules or not'''
+
+        self.layout_estimation = nn.DataParallel(self.layout_estimation)
+        self.mesh_reconstruction = nn.DataParallel(self.mesh_reconstruction)
         self.freeze_modules(cfg)
+        return
 
     def get_extra_results(self, all_output):
-        # center and coef of the reconstructed mesh
         extra_results = {}
-        if isinstance(self.mesh_reconstruction.module, MODULES.get('LDIF')):
-            structured_implicit = all_output['structured_implicit']
-            in_coor_min = structured_implicit.all_centers.min(dim=1)[0]
-            in_coor_max = structured_implicit.all_centers.max(dim=1)[0]
 
-            obj_center = (in_coor_max + in_coor_min) / 2.
-            obj_center[:, 2] *= -1
-            obj_coef = (in_coor_max - in_coor_min) / 2.
-        else:
-            if all_output['meshes'] is None:
-                return {}
-            obj_center = (all_output['meshes'].max(dim=0)[0] +
-                          all_output['meshes'].min(dim=0)[0]) / 2.
-            obj_center = obj_center.detach()
-            obj_coef = (all_output['meshes'].max(dim=0)[0] -
-                        all_output['meshes'].min(dim=0)[0]) / 2.
-            obj_coef = obj_coef.detach()
+        structured_implicit = all_output['structured_implicit']
+        in_coor_min = structured_implicit.all_centers.min(dim=1)[0]
+        in_coor_max = structured_implicit.all_centers.max(dim=1)[0]
+
+        obj_center = (in_coor_max + in_coor_min) / 2.
+        obj_center[:, 2] *= -1
+        obj_coef = (in_coor_max - in_coor_min) / 2.
 
         extra_results.update({'obj_center': obj_center, 'obj_coef': obj_coef})
         return extra_results
@@ -135,13 +119,13 @@ class TOTAL3D(BaseNetwork):
 
         # predict meshes
         if self.cfg.config['mode'] == 'train':
-            mesh_output = self.mesh_reconstruction(data['patch_for_mesh'],
-                                                   data['cls_codes'],
-                                                   structured_implicit=True)
+            data['img'] = data['patch_for_mesh']
+            data['cls'] = data['cls_codes']
+            mesh_output = self.mesh_reconstruction(data)
         else:
-            mesh_output = self.mesh_reconstruction(data['patch_for_mesh'],
-                                                   data['cls_codes'],
-                                                   reconstruction='mesh')
+            data['img'] = data['patch_for_mesh']
+            data['cls'] = data['cls_codes']
+            mesh_output = self.mesh_reconstruction(data)
             out_points = mesh_output.get('mesh_coordinates_results', [None])
             out_faces = mesh_output.get('faces', None)
             mesh_output.update({
@@ -149,12 +133,10 @@ class TOTAL3D(BaseNetwork):
                 'out_faces': out_faces
             })
 
-        # construct structured_implicti from dict
         if 'structured_implicit' in mesh_output:
             mesh_output['structured_implicit'] = StructuredImplicit(
                 config=self.cfg.config, **mesh_output['structured_implicit'])
 
-        # convert to SUNRGBD coordinates
         if mesh_output.get('meshes') is not None:
             if isinstance(mesh_output['meshes'], list):
                 for m in mesh_output['meshes']:
@@ -164,7 +146,6 @@ class TOTAL3D(BaseNetwork):
         mesh_output['mgn'] = self.mesh_reconstruction
         all_output.update(mesh_output)
 
-        # get extra_results
         all_output.update(self.get_extra_results(all_output))
 
         if hasattr(self, 'output_adjust'):
