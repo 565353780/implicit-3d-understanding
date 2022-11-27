@@ -7,21 +7,27 @@ from external.ldif.util import file_util
 
 
 def homogenize(m):
-  # Adds homogeneous coordinates to a [..., N,N] matrix.
-  m = F.pad(m, [0, 1, 0, 1], "constant", 0)
-  m[..., -1, -1] = 1
-  return m
+    # Adds homogeneous coordinates to a [..., N,N] matrix.
+    m = F.pad(m, [0, 1, 0, 1], "constant", 0)
+    m[..., -1, -1] = 1
+    return m
+
 
 def _unflatten(config, vector):
-    return torch.split(vector, [1, 3, 6, config['model']['mesh_reconstruction']['implicit_parameter_length']], -1)
+    return torch.split(vector,
+                       [1, 3, 6, config['model']['implicit_parameter_length']],
+                       -1)
+
 
 class StructuredImplicit(object):
+
     def __init__(self, config, constant, center, radius, iparam, net=None):
         # (ldif.representation.structured_implicit_function.StructuredImplicit.from_activation)
         self.config = config
-        self.implicit_parameter_length = config['model']['mesh_reconstruction']['implicit_parameter_length']
-        self.element_count = config['model']['mesh_reconstruction']['element_count']
-        self.sym_element_count = config['model']['mesh_reconstruction']['sym_element_count']
+        self.implicit_parameter_length = config['model'][
+            'implicit_parameter_length']
+        self.element_count = config['model']['element_count']
+        self.sym_element_count = config['model']['sym_element_count']
 
         self.constants = constant
         self.radii = radius
@@ -49,7 +55,8 @@ class StructuredImplicit(object):
         radius_var = 0.15 * radius_var
         radius_var = radius_var * radius_var
         max_euler_angle = np.pi / 4.0
-        radius_rot = torch.clamp(radius[..., 3:], -max_euler_angle, max_euler_angle)
+        radius_rot = torch.clamp(radius[..., 3:], -max_euler_angle,
+                                 max_euler_angle)
         radius = torch.cat([radius_var, radius_rot], -1)
         new_center = center / 2
         return cls(config, constant, new_center, radius, iparam, net)
@@ -65,19 +72,25 @@ class StructuredImplicit(object):
         samples = samples.unsqueeze(1).expand(-1, self.element_count, -1, -1)
         sym_samples = samples[:, :self.sym_element_count].clone()
         # sym_samples *= torch.tensor([1, 1, -1], dtype=torch.float32, device=self.device)  # reflect across the XY plane
-        sym_samples *= torch.tensor([-1, 1, 1], dtype=torch.float32, device=self.device)  # reflect across the YZ plane
+        sym_samples *= torch.tensor(
+            [-1, 1, 1], dtype=torch.float32,
+            device=self.device)  # reflect across the YZ plane
         effective_samples = torch.cat([samples, sym_samples], 1)
         return effective_samples
 
     def compute_world2local(self):
-        tx = torch.eye(3, device=self.device).expand(self.batch_size, self.element_count, -1, -1)
+        tx = torch.eye(3,
+                       device=self.device).expand(self.batch_size,
+                                                  self.element_count, -1, -1)
         centers = self.centers.unsqueeze(-1)
         tx = torch.cat([tx, -centers], -1)
-        lower_row = torch.tensor([0., 0., 0., 1.], device=self.device).expand(self.batch_size, self.element_count, 1, -1)
+        lower_row = torch.tensor([0., 0., 0., 1.], device=self.device).expand(
+            self.batch_size, self.element_count, 1, -1)
         tx = torch.cat([tx, lower_row], -2)
 
         # Compute a rotation transformation
-        rotation = camera_util.roll_pitch_yaw_to_rotation_matrices(self.radii[..., 3:6]).inverse()
+        rotation = camera_util.roll_pitch_yaw_to_rotation_matrices(
+            self.radii[..., 3:6]).inverse()
         diag = 1.0 / (torch.sqrt(self.radii[..., :3] + 1e-8) + 1e-8)
         scale = torch.diag_embed(diag)
 
@@ -105,12 +118,16 @@ class StructuredImplicit(object):
         effective_radii = self._tile_for_symgroups(self.radii)
 
         effective_samples = self._generate_symgroup_samples(samples)
-        constants_quadrics = torch.zeros(self.batch_size, self.effective_element_count, 4, 4, device=self.device)
+        constants_quadrics = torch.zeros(self.batch_size,
+                                         self.effective_element_count,
+                                         4,
+                                         4,
+                                         device=self.device)
         constants_quadrics[:, :, -1:, -1] = effective_constants
 
         per_element_constants, per_element_weights = quadrics.compute_shape_element_influences(
-            constants_quadrics, effective_centers, effective_radii, effective_samples
-        )
+            constants_quadrics, effective_centers, effective_radii,
+            effective_samples)
 
         # We currently have constants, weights with shape:
         # [batch_size, element_count, sample_count, 1].
@@ -120,9 +137,11 @@ class StructuredImplicit(object):
         # have shape [batch_size, sample_count, 3]. This is because each sample
         # should be evaluated in the relative coordinate system of the
         # The world2local transformations for each element. Shape [B, EC, 4, 4].
-        effective_world2local = self._tile_for_symgroups(self.compute_world2local())
-        local_samples = torch.matmul(F.pad(effective_samples, [0, 1], "constant", 1),
-                                     effective_world2local.transpose(-1, -2))[..., :3]
+        effective_world2local = self._tile_for_symgroups(
+            self.compute_world2local())
+        local_samples = torch.matmul(
+            F.pad(effective_samples, [0, 1], "constant", 1),
+            effective_world2local.transpose(-1, -2))[..., :3]
         implicit_values = self.implicit_values(local_samples)
 
         residuals = 1 + implicit_values
@@ -137,39 +156,53 @@ class StructuredImplicit(object):
     @property
     def vector(self):
         if self._packed_vector is None:
-            self._packed_vector = torch.cat([self.constants, self.centers, self.radii, self.iparams], -1)
+            self._packed_vector = torch.cat(
+                [self.constants, self.centers, self.radii, self.iparams], -1)
         return self._packed_vector
 
     @property
     def analytic_code(self):
         if self._analytic_code is None:
-            self._analytic_code = torch.cat([self.constants, self.centers, self.radii], -1)
+            self._analytic_code = torch.cat(
+                [self.constants, self.centers, self.radii], -1)
         return self._analytic_code
 
     def savetxt(self, path):
         assert self.vector.shape[0] == 1
         sif_vector = self.vector.squeeze().cpu().numpy()
         sif_vector[:, 4:7] = np.sqrt(np.maximum(sif_vector[:, 4:7], 0))
-        out = 'SIF\n%i %i %i\n' % (self.element_count, 0, self.implicit_parameter_length)
+        out = 'SIF\n%i %i %i\n' % (self.element_count, 0,
+                                   self.implicit_parameter_length)
         for row_idx in range(self.element_count):
-            row = ' '.join(10 * ['%.9g']) % tuple(sif_vector[row_idx, :10].tolist())
+            row = ' '.join(10 * ['%.9g']) % tuple(
+                sif_vector[row_idx, :10].tolist())
             symmetry = int(row_idx < self.sym_element_count)
             row += ' %i' % symmetry
-            implicit_params = ' '.join(self.implicit_parameter_length * ['%.9g']) % (
-                tuple(sif_vector[row_idx, 10:].tolist()))
+            implicit_params = ' '.join(
+                self.implicit_parameter_length * ['%.9g']) % (tuple(
+                    sif_vector[row_idx, 10:].tolist()))
             row += ' ' + implicit_params
             row += '\n'
             out += row
         file_util.writetxt(path, out)
 
     def unbind(self):
-        return [StructuredImplicit.from_packed_vector(self.config, self.vector[i:i+1], self.net)
-                for i in range(self.vector.size(0))]
+        return [
+            StructuredImplicit.from_packed_vector(self.config,
+                                                  self.vector[i:i + 1],
+                                                  self.net)
+            for i in range(self.vector.size(0))
+        ]
 
     def __getitem__(self, item):
-        return StructuredImplicit.from_packed_vector(self.config, self.vector[item], self.net)
+        return StructuredImplicit.from_packed_vector(self.config,
+                                                     self.vector[item],
+                                                     self.net)
 
     def dict(self):
-        return {'constant': self.constants, 'radius': self.radii, 'center': self.centers, 'iparam': self.iparams}
-
-
+        return {
+            'constant': self.constants,
+            'radius': self.radii,
+            'center': self.centers,
+            'iparam': self.iparams
+        }
