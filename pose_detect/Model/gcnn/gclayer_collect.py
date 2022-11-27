@@ -23,6 +23,7 @@ class GraphConvolutionLayerCollect(nn.Module):
             dim_obj, dim_rel))  # rel from obj (object)
         self.collect_units.append(CollectionUnit(dim_obj,
                                                  dim_obj))  # obj from obj
+        return
 
     def forward(self, target, source, attention, unit_id):
         collection = self.collect_units[unit_id](target, source, attention)

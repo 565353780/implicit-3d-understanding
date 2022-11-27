@@ -3,37 +3,40 @@
 
 import torch
 import torch.nn as nn
-from configs.data_config import NYU40CLASSES, pix3d_n_classes
 import torch.nn.functional as F
-from net_utils.libs import get_bdb_form_from_corners, recover_points_to_world_sys, \
-    get_rotation_matix_result, get_bdb_3d_result, recover_points_to_obj_sys
 
+from configs.data_config import NYU40CLASSES, pix3d_n_classes
+from net_utils.libs import (get_bdb_3d_result, get_bdb_form_from_corners,
+                            get_rotation_matix_result,
+                            recover_points_to_obj_sys,
+                            recover_points_to_world_sys)
 from pose_detect.Model.gcnn.gclayer_collect import GraphConvolutionLayerCollect
 from pose_detect.Model.gcnn.gclayer_update import GraphConvolutionLayerUpdate
 
 
 class GCNN(nn.Module):
 
-    def __init__(self, cfg, optim_spec=None):
-        super(GCNN, self).__init__()
-        '''Optimizer parameters used in training'''
-        self.optim_spec = optim_spec
-        '''configs and params'''
-        self.cfg = cfg
-        self.lo_features = cfg.config['model']['output_adjust']['lo_features']
-        self.obj_features = cfg.config['model']['output_adjust'][
-            'obj_features']
-        self.rel_features = cfg.config['model']['output_adjust'][
-            'rel_features']
-        feature_dim = cfg.config['model']['output_adjust']['feature_dim']
-        self.feat_update_step = cfg.config['model']['output_adjust'][
-            'feat_update_step']
-        self.res_output = cfg.config['model']['output_adjust'].get(
-            'res_output', False)
-        self.feat_update_group = cfg.config['model']['output_adjust'].get(
-            'feat_update_group', 1)
-        self.res_group = cfg.config['model']['output_adjust'].get(
-            'res_group', False)
+    def __init__(self, cfg):
+        super().__init__()
+
+        self.lo_features = [
+            'pitch_reg_result', 'roll_reg_result', 'pitch_cls_result',
+            'roll_cls_result', 'lo_ori_reg_result', 'lo_ori_cls_result',
+            'lo_centroid_result', 'lo_coeffs_result', 'lo_afeatures', 'K'
+        ]
+        self.obj_features = [
+            'size_cls', 'cls_codes', 'size_reg_result', 'ori_reg_result',
+            'ori_cls_result', 'centroid_reg_result', 'centroid_cls_result',
+            'offset_2D_result', 'analytic_code', 'odn_arfeatures',
+            'blob_center'
+        ]
+        self.rel_features = ['g_features', 'bdb2D_pos']
+
+        feature_dim = 512
+        self.feat_update_step = 4
+        self.res_output = True
+        self.feat_update_group = 1
+        self.res_group = False
 
         self.feature_length = {
             'size_cls': len(NYU40CLASSES),
@@ -68,6 +71,7 @@ class GCNN(nn.Module):
             2,  # (ldif.element_count + ldif.sym_element_count) // 2
             'structured_implicit_vector': None,
         }
+
         obj_features_len = sum(
             [self.feature_length[k] for k in self.obj_features])
         rel_features_len = sum(
@@ -75,6 +79,7 @@ class GCNN(nn.Module):
         lo_features_len = sum(
             [self.feature_length[k] for k in self.lo_features])
 
+        self.cfg = cfg
         bin = cfg.dataset_config.bins
         self.OBJ_ORI_BIN = len(bin['ori_bin'])
         self.OBJ_CENTER_BIN = len(bin['centroid_bin'])
@@ -82,7 +87,6 @@ class GCNN(nn.Module):
         self.ROLL_BIN = len(bin['roll_bin'])
         self.LO_ORI_BIN = len(bin['layout_ori_bin'])
         '''modules'''
-        # feature embedding (from graph-rcnn)
         self.obj_embedding = nn.Sequential(
             nn.Linear(obj_features_len, feature_dim),
             nn.ReLU(True),
@@ -99,18 +103,15 @@ class GCNN(nn.Module):
             nn.Linear(feature_dim, feature_dim),
         )
 
-        # graph message passing (from graph-rcnn)
-        if self.feat_update_step > 0:
-            self.gcn_collect_feat = nn.ModuleList([
-                GraphConvolutionLayerCollect(feature_dim, feature_dim)
-                for i in range(self.feat_update_group)
-            ])
-            self.gcn_update_feat = nn.ModuleList([
-                GraphConvolutionLayerUpdate(feature_dim, feature_dim)
-                for i in range(self.feat_update_group)
-            ])
+        self.gcn_collect_feat = nn.ModuleList([
+            GraphConvolutionLayerCollect(feature_dim, feature_dim)
+            for i in range(self.feat_update_group)
+        ])
+        self.gcn_update_feat = nn.ModuleList([
+            GraphConvolutionLayerUpdate(feature_dim, feature_dim)
+            for i in range(self.feat_update_group)
+        ])
 
-        # feature to output (from Total3D object_detection)
         # branch to predict the size
         self.fc1 = nn.Linear(feature_dim, feature_dim // 2)
         self.fc2 = nn.Linear(feature_dim // 2, 3)
@@ -149,6 +150,7 @@ class GCNN(nn.Module):
                 m.weight.data.normal_(0, 0.01)
                 if hasattr(m.bias, 'data'):
                     m.bias.data.zero_()
+        return
 
     def _K2feature(self, K):
         camKs = K.reshape(K.shape[0], -1)
@@ -313,45 +315,47 @@ class GCNN(nn.Module):
     def _get_map(self, data):
         device = data['g_features'].device
         split = data['split']
-        obj_num = split[-1][-1] + split.shape[
-            0]  # number of objects and layouts
-        obj_obj_map = torch.zeros(
-            [obj_num, obj_num])  # mapping of obj/lo vertices with connections
-        rel_inds = []  # indexes of vertices connected by relation nodes
-        rel_masks = [
-        ]  # mask of relation features for obj/lo vertices connected by relation nodes
-        obj_masks = torch.zeros(obj_num,
-                                dtype=torch.bool)  # mask of object vertices
-        lo_masks = torch.zeros(obj_num,
-                               dtype=torch.bool)  # mask of layout vertices
+
+        # number of objects and layouts
+        obj_num = split[-1][-1] + split.shape[0]
+        # mapping of obj/lo vertices with connections
+        obj_obj_map = torch.zeros([obj_num, obj_num])
+        # indexes of vertices connected by relation nodes
+        rel_inds = []
+        # mask of relation features for obj/lo vertices connected by relation nodes
+        rel_masks = []
+        # mask of object vertices
+        obj_masks = torch.zeros(obj_num, dtype=torch.bool)
+        # mask of layout vertices
+        lo_masks = torch.zeros(obj_num, dtype=torch.bool)
+
         for lo_index, (start, end) in enumerate(split):
-            start = start + lo_index  # each subgraph has Ni object vertices and 1 layout vertex
-            end = end + lo_index + 1  # consider layout vertex, Ni + 1 vertices in total
-            obj_obj_map[
-                start:end, start:
-                end] = 1  # each subgraph is a complete graph with self circle
+            # each subgraph has Ni object vertices and 1 layout vertex
+            start = start + lo_index
+            # consider layout vertex, Ni + 1 vertices in total
+            end = end + lo_index + 1
+            # each subgraph is a complete graph with self circle
+            obj_obj_map[start:end, start:end] = 1
             obj_ind = torch.arange(start, end, dtype=torch.long)
-            subj_ind_i, obj_ind_i = torch.meshgrid(
-                obj_ind, obj_ind)  # indexes of each vertex in the subgraph
+            # indexes of each vertex in the subgraph
+            subj_ind_i, obj_ind_i = torch.meshgrid(obj_ind, obj_ind)
             rel_ind_i = torch.stack(
                 [subj_ind_i.reshape(-1),
                  obj_ind_i.reshape(-1)], -1)
-            rel_mask_i = rel_ind_i[:,
-                                   0] != rel_ind_i[:,
-                                                   1]  # vertices connected by relation nodes should be different
+            # vertices connected by relation nodes should be different
+            rel_mask_i = rel_ind_i[:, 0] != rel_ind_i[:, 1]
             rel_inds.append(rel_ind_i[rel_mask_i])
             rel_masks.append(rel_mask_i)
-            obj_masks[
-                start:end -
-                1] = True  # for each subgraph, first Ni vertices are objects
-            lo_masks[end -
-                     1] = True  # for each subgraph, last 1 vertex is layout
+            # for each subgraph, first Ni vertices are objects
+            obj_masks[start:end - 1] = True
+            # for each subgraph, last 1 vertex is layout
+            lo_masks[end - 1] = True
 
         rel_inds = torch.cat(rel_inds, 0)
         rel_masks = torch.cat(rel_masks, 0)
 
-        subj_pred_map = torch.zeros(
-            obj_num, rel_inds.shape[0])  # [sum(Ni + 1), sum((Ni + 1) ** 2)]
+        # [sum(Ni + 1), sum((Ni + 1) ** 2)]
+        subj_pred_map = torch.zeros(obj_num, rel_inds.shape[0])
         obj_pred_map = torch.zeros(obj_num, rel_inds.shape[0])
         # map from subject (an object or layout vertex) to predicate (a relation vertex)
         subj_pred_map.scatter_(0, (rel_inds[:, 0].view(1, -1)), 1)
