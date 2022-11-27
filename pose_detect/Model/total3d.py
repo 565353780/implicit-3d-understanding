@@ -13,6 +13,7 @@ from pose_detect.Config.ldif import LDIF_CONFIG
 from pose_detect.Model.pose_net import PoseNet
 from pose_detect.Model.bdb_3d.bdb_3d_net import Bdb3DNet
 from pose_detect.Model.ldif.ldif import LDIF
+from pose_detect.Model.gcnn.gcnn import GCNN
 
 from pose_detect.Loss.pose_loss import PoseLoss
 from pose_detect.Loss.det_loss import DetLoss
@@ -36,18 +37,14 @@ class TOTAL3D(BaseNetwork):
         self.object_detection_loss = DetLoss(cfg.config)
 
         self.mesh_reconstruction = LDIF(LDIF_CONFIG, "test")
-        self.mesh_reconstruction_loss = LDIFReconLoss(cfg.config)
+        self.mesh_reconstruction_loss = LDIFReconLoss()
+
+        self.output_adjust = GCNN(cfg)
 
         phase_names = []
         phase_names += ['output_adjust']
         '''load network blocks'''
         for phase_name in phase_names:
-            net_spec = cfg.config['model'][phase_name]
-            method_name = net_spec['method']
-            # load specific optimizer parameters
-            optim_spec = cfg.config['optimizer']
-            subnet = MODULES.get(method_name)(cfg, optim_spec)
-            self.add_module(phase_name, subnet)
             '''load corresponding loss functions'''
             setattr(
                 self, phase_name + '_loss',
@@ -134,7 +131,7 @@ class TOTAL3D(BaseNetwork):
 
         if 'structured_implicit' in mesh_output:
             mesh_output['structured_implicit'] = StructuredImplicit(
-                config=self.cfg.config, **mesh_output['structured_implicit'])
+                config=LDIF_CONFIG, **mesh_output['structured_implicit'])
 
         if mesh_output.get('meshes') is not None:
             if isinstance(mesh_output['meshes'], list):
