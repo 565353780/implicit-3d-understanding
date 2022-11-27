@@ -18,6 +18,7 @@ from pose_detect.Model.gcnn.gcnn import GCNN
 from pose_detect.Loss.pose_loss import PoseLoss
 from pose_detect.Loss.det_loss import DetLoss
 from pose_detect.Loss.ldif_loss import LDIFReconLoss
+from pose_detect.Loss.joint_loss import JointLoss
 
 
 class TOTAL3D(BaseNetwork):
@@ -41,18 +42,7 @@ class TOTAL3D(BaseNetwork):
 
         self.output_adjust = GCNN(cfg)
 
-        phase_names = []
-        phase_names += ['output_adjust']
-        '''load network blocks'''
-        for phase_name in phase_names:
-            '''load corresponding loss functions'''
-            setattr(
-                self, phase_name + '_loss',
-                LOSSES.get(self.cfg.config['model'][phase_name]['loss'],
-                           'Null')(self.cfg.config['model'][phase_name].get(
-                               'weight', 1), cfg.config))
-
-        setattr(self, 'joint_loss', LOSSES.get('JointLoss', 'Null')(1))
+        self.joint_loss = JointLoss()
 
         self.layout_estimation = nn.DataParallel(self.layout_estimation)
         self.mesh_reconstruction = nn.DataParallel(self.mesh_reconstruction)
@@ -163,79 +153,61 @@ class TOTAL3D(BaseNetwork):
         calculate loss of est_out given gt_out.
         '''
         loss_weights = self.cfg.config.get('loss_weights', {})
-        if self.cfg.config[self.cfg.config['mode']]['phase'] in [
-                'layout_estimation', 'joint'
-        ]:
-            layout_loss, layout_results = self.layout_estimation_loss(
-                est_data, gt_data, self.cfg.bins_tensor)
-            layout_loss_weighted = {
-                k: v * loss_weights.get(k, 1.0)
-                for k, v in layout_loss.items()
-            }
-            total_layout_loss = sum(layout_loss_weighted.values())
-            total_layout_loss_unweighted = sum(
-                [v.detach() for v in layout_loss.values()])
-            for key, value in layout_loss.items():
-                layout_loss[key] = value.item()
-        if self.cfg.config[self.cfg.config['mode']]['phase'] in [
-                'object_detection', 'joint'
-        ]:
-            object_loss = self.object_detection_loss(est_data, gt_data)
-            object_loss_weighted = {
-                k: v * loss_weights.get(k, 1.0)
-                for k, v in object_loss.items()
-            }
-            total_object_loss = sum(object_loss_weighted.values())
-            total_object_loss_unweighted = sum(
-                [v.detach() for v in object_loss.values()])
-            for key, value in object_loss.items():
-                object_loss[key] = value.item()
-        if self.cfg.config[self.cfg.config['mode']]['phase'] in ['joint']:
-            joint_loss, extra_results = self.joint_loss(
-                est_data, gt_data, self.cfg.bins_tensor, layout_results)
-            joint_loss_weighted = {
-                k: v * loss_weights.get(k, 1.0)
-                for k, v in joint_loss.items()
-            }
-            mesh_loss = self.mesh_reconstruction_loss(est_data, gt_data,
-                                                      extra_results)
-            mesh_loss_weighted = {
-                k: v * loss_weights.get(k, 1.0)
-                for k, v in mesh_loss.items()
-            }
 
-            total_joint_loss = sum(joint_loss_weighted.values()) + sum(
-                mesh_loss_weighted.values())
-            total_joint_loss_unweighted = \
-                sum([v.detach() for v in joint_loss.values()]) \
-                + sum([v.detach() if isinstance(v, torch.Tensor) else v for v in mesh_loss.values()])
-            for key, value in mesh_loss.items():
-                mesh_loss[key] = float(value)
-            for key, value in joint_loss.items():
-                joint_loss[key] = value.item()
+        layout_loss, layout_results = self.layout_estimation_loss(
+            est_data, gt_data, self.cfg.bins_tensor)
+        layout_loss_weighted = {
+            k: v * loss_weights.get(k, 1.0)
+            for k, v in layout_loss.items()
+        }
+        total_layout_loss = sum(layout_loss_weighted.values())
+        total_layout_loss_unweighted = sum(
+            [v.detach() for v in layout_loss.values()])
+        for key, value in layout_loss.items():
+            layout_loss[key] = value.item()
 
-        if self.cfg.config[
-                self.cfg.config['mode']]['phase'] == 'layout_estimation':
-            return {
-                'total': total_layout_loss,
-                **layout_loss, 'total_unweighted': total_layout_loss_unweighted
-            }
-        if self.cfg.config[
-                self.cfg.config['mode']]['phase'] == 'object_detection':
-            return {
-                'total': total_object_loss,
-                **object_loss, 'total_unweighted': total_object_loss_unweighted
-            }
-        if self.cfg.config[self.cfg.config['mode']]['phase'] == 'joint':
-            total3d_loss = total_object_loss + total_joint_loss + obj_cam_ratio * total_layout_loss
-            total3d_loss_unweighted = total_object_loss_unweighted + total_joint_loss_unweighted\
-                                      + obj_cam_ratio * total_layout_loss_unweighted
-            return {
-                'total': total3d_loss,
-                **layout_loss,
-                **object_loss,
-                **mesh_loss,
-                **joint_loss, 'total_unweighted': total3d_loss_unweighted
-            }
-        else:
-            raise NotImplementedError
+        object_loss = self.object_detection_loss(est_data, gt_data)
+        object_loss_weighted = {
+            k: v * loss_weights.get(k, 1.0)
+            for k, v in object_loss.items()
+        }
+        total_object_loss = sum(object_loss_weighted.values())
+        total_object_loss_unweighted = sum(
+            [v.detach() for v in object_loss.values()])
+        for key, value in object_loss.items():
+            object_loss[key] = value.item()
+
+        joint_loss, extra_results = self.joint_loss(est_data, gt_data,
+                                                    self.cfg.bins_tensor,
+                                                    layout_results)
+        joint_loss_weighted = {
+            k: v * loss_weights.get(k, 1.0)
+            for k, v in joint_loss.items()
+        }
+        mesh_loss = self.mesh_reconstruction_loss(est_data, gt_data,
+                                                  extra_results)
+        mesh_loss_weighted = {
+            k: v * loss_weights.get(k, 1.0)
+            for k, v in mesh_loss.items()
+        }
+
+        total_joint_loss = sum(joint_loss_weighted.values()) + sum(
+            mesh_loss_weighted.values())
+        total_joint_loss_unweighted = \
+            sum([v.detach() for v in joint_loss.values()]) \
+            + sum([v.detach() if isinstance(v, torch.Tensor) else v for v in mesh_loss.values()])
+        for key, value in mesh_loss.items():
+            mesh_loss[key] = float(value)
+        for key, value in joint_loss.items():
+            joint_loss[key] = value.item()
+
+        total3d_loss = total_object_loss + total_joint_loss + obj_cam_ratio * total_layout_loss
+        total3d_loss_unweighted = total_object_loss_unweighted + total_joint_loss_unweighted\
+                                  + obj_cam_ratio * total_layout_loss_unweighted
+        return {
+            'total': total3d_loss,
+            **layout_loss,
+            **object_loss,
+            **mesh_loss,
+            **joint_loss, 'total_unweighted': total3d_loss_unweighted
+        }

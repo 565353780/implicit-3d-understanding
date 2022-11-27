@@ -435,6 +435,9 @@ class GCNN(nn.Module):
         return rel_masks.to(device), obj_masks.to(device), lo_masks.to(device), \
                obj_obj_map.to(device), subj_pred_map.to(device), obj_pred_map.to(device)
 
+    def loss(self, loss):
+        return torch.mean(loss)
+
     def forward(self, output):
         maps = self._get_map(output)
         if maps is None:
