@@ -34,7 +34,6 @@ class GCNN(nn.Module):
 
         feature_dim = 512
         self.feat_update_step = 4
-        self.res_output = True
         self.feat_update_group = 1
         self.res_group = False
 
@@ -365,13 +364,9 @@ class GCNN(nn.Module):
         return rel_masks.to(device), obj_masks.to(device), lo_masks.to(device), \
                obj_obj_map.to(device), subj_pred_map.to(device), obj_pred_map.to(device)
 
-    def loss(self, loss):
-        return torch.mean(loss)
-
     def forward(self, output):
         maps = self._get_map(output)
-        if maps is None:
-            return {}
+
         rel_masks, obj_masks, lo_masks, obj_obj_map, subj_pred_map, obj_pred_map = maps
 
         x_obj, x_pred = self._get_object_features(
@@ -380,17 +375,17 @@ class GCNN(nn.Module):
         x_lo = self._get_layout_features(output)
         x_lo = self.lo_embedding(x_lo)
 
-        x_obj_lo = []  # representation of object and layout vertices
-        x_pred_objlo = [
-        ]  # representation of relation vertices connecting obj/lo vertices
+        # representation of object and layout vertices
+        x_obj_lo = []
+        # representation of relation vertices connecting obj/lo vertices
+        x_pred_objlo = []
+
         rel_pair = output['rel_pair_counts']
         for lo_index, (start, end) in enumerate(output['split']):
-            x_obj_lo.append(
-                x_obj[start:end]
-            )  # for each subgraph, first Ni vertices are objects
-            x_obj_lo.append(
-                x_lo[lo_index:lo_index +
-                     1])  # for each subgraph, last 1 vertex is layout
+            # for each subgraph, first Ni vertices are objects
+            x_obj_lo.append(x_obj[start:end])
+            # for each subgraph, last 1 vertex is layout
+            x_obj_lo.append(x_lo[lo_index:lo_index + 1])
             x_pred_objlo.append(
                 x_pred[rel_pair[lo_index]:rel_pair[lo_index + 1]].reshape(
                     end - start, end - start, -1))
@@ -399,9 +394,9 @@ class GCNN(nn.Module):
                                      "constant", 0.001).permute(1, 2, 0)
             x_pred_objlo[-1] = x_pred_objlo[-1].reshape((end - start + 1)**2,
                                                         -1)
-        x_obj = torch.cat(
-            x_obj_lo
-        )  # from here, for compatibility with graph-rcnn, x_obj corresponds to obj/lo vertices
+
+        # from here, for compatibility with graph-rcnn, x_obj corresponds to obj/lo vertices
+        x_obj = torch.cat(x_obj_lo)
         x_pred = torch.cat(x_pred_objlo)
         x_pred = x_pred[rel_masks]
         '''feature level agcn'''
@@ -505,22 +500,21 @@ class GCNN(nn.Module):
         lo_centroid = lo_ct[:, :3]
         lo_coeffs = lo_ct[:, 3:]
 
-        if self.res_output:
-            size += output['size_reg_result']
-            ori_reg += output['ori_reg_result']
-            ori_cls += output['ori_cls_result']
-            centroid_reg += output['centroid_reg_result']
-            centroid_cls += output['centroid_cls_result']
-            offset += output['offset_2D_result']
+        size += output['size_reg_result']
+        ori_reg += output['ori_reg_result']
+        ori_cls += output['ori_cls_result']
+        centroid_reg += output['centroid_reg_result']
+        centroid_cls += output['centroid_cls_result']
+        offset += output['offset_2D_result']
 
-            pitch_reg += output['pitch_reg_result']
-            pitch_cls += output['pitch_cls_result']
-            roll_reg += output['roll_reg_result']
-            roll_cls += output['roll_cls_result']
-            lo_ori_reg += output['lo_ori_reg_result']
-            lo_ori_cls += output['lo_ori_cls_result']
-            lo_centroid += output['lo_centroid_result']
-            lo_coeffs += output['lo_coeffs_result']
+        pitch_reg += output['pitch_reg_result']
+        pitch_cls += output['pitch_cls_result']
+        roll_reg += output['roll_reg_result']
+        roll_cls += output['roll_cls_result']
+        lo_ori_reg += output['lo_ori_reg_result']
+        lo_ori_cls += output['lo_ori_cls_result']
+        lo_centroid += output['lo_centroid_result']
+        lo_coeffs += output['lo_coeffs_result']
 
         return {
             'size_reg_result': size,
