@@ -93,7 +93,7 @@ class Config(object):
         self.dataset = dataset
 
         if self.dataset == 'sunrgbd':
-            self.metadata_path = './data/sunrgbd'
+            self.metadata_path = '../implicit-3d-understanding/data/sunrgbd'
             self.train_test_data_path = os.path.join(
                 self.metadata_path, 'sunrgbd_train_test_data')
             self.__size_avg_path = os.path.join(

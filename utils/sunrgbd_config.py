@@ -17,7 +17,7 @@ class SUNRGBD_CONFIG(object):
         """
         Configuration of SUNRGBD data paths.
         """
-        self.metadata_path = './data/sunrgbd'
+        self.metadata_path = '../implicit-3d-understanding/data/sunrgbd'
         self.data_root = os.path.join(self.metadata_path, 'Dataset')
         self.clean_data_root = os.path.join(self.data_root, 'data_clean')
         self.datasource_path = os.path.join(self.data_root, 'SUNRGBD')

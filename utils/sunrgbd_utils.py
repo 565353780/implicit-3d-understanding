@@ -4,7 +4,7 @@ import pickle
 from PIL import Image
 import json
 from scipy.io import loadmat
-from libs.tools import get_world_R, normalize_point, yaw_pitch_roll_from_R, R_from_yaw_pitch_roll
+from Lib.tools import get_world_R, normalize_point, yaw_pitch_roll_from_R, R_from_yaw_pitch_roll
 from utils.sunrgbd_config import SUNRGBD_CONFIG, SUNRGBD_DATA
 import pandas as pd
 import jellyfish as jf
@@ -12,7 +12,9 @@ from copy import deepcopy
 import cv2
 
 sunrgbd_config = SUNRGBD_CONFIG()
-class_mapping = pd.read_csv(sunrgbd_config.class_mapping_file).drop(['Unnamed: 0'], axis=1)
+class_mapping = pd.read_csv(sunrgbd_config.class_mapping_file).drop(
+    ['Unnamed: 0'], axis=1)
+
 
 def get_cam_KRT(cam_paras, im_size):
     '''
@@ -31,7 +33,9 @@ def get_cam_KRT(cam_paras, im_size):
     up /= np.linalg.norm(up)
     right = np.cross(toward, up)  # z-axis
     right /= np.linalg.norm(right)
-    R = np.vstack([toward, up, right]).T  # columns respectively corresponds to toward, up, right vectors.
+    R = np.vstack([
+        toward, up, right
+    ]).T  # columns respectively corresponds to toward, up, right vectors.
 
     fov_x = cam_paras[9]
     fov_y = cam_paras[10]
@@ -41,9 +45,11 @@ def get_cam_KRT(cam_paras, im_size):
     f_x = width / (2 * np.tan(fov_x))
     f_y = height / (2 * np.tan(fov_y))
 
-    K = np.array([[f_x, 0., (width-1)/2.], [0., f_y, (height-1)/2.], [0., 0., 1.]])
+    K = np.array([[f_x, 0., (width - 1) / 2.], [0., f_y, (height - 1) / 2.],
+                  [0., 0., 1.]])
 
     return K, R, ori_pnt
+
 
 def rotate_towards_cam_front(normal, point, frontal_basis_id):
     '''
@@ -52,7 +58,9 @@ def rotate_towards_cam_front(normal, point, frontal_basis_id):
 
     rot_matrix = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])
 
-    rotated_normals = [np.linalg.matrix_power(rot_matrix, i).dot(normal) for i in range(4)]
+    rotated_normals = [
+        np.linalg.matrix_power(rot_matrix, i).dot(normal) for i in range(4)
+    ]
 
     max_dot_value = 0.
     best_normal = None
@@ -61,13 +69,14 @@ def rotate_towards_cam_front(normal, point, frontal_basis_id):
     hori_id = 1 - frontal_basis_id
     for vector in rotated_normals:
         dot_value = vector.dot(point)
-        hori_id = 1-hori_id
+        hori_id = 1 - hori_id
         if dot_value > max_dot_value:
             max_dot_value = dot_value
             best_normal = vector
             best_hori_id = hori_id
 
     return best_normal, best_hori_id
+
 
 def get_layout_info(layout_3D, cam_front):
     '''
@@ -76,21 +85,24 @@ def get_layout_info(layout_3D, cam_front):
     '''
     center = layout_3D['centroid']
     vectors = layout_3D['vectors']
-    coeffs = np.linalg.norm(vectors,axis=1)
-    basis = np.array([vector/np.linalg.norm(vector) for vector in vectors])
+    coeffs = np.linalg.norm(vectors, axis=1)
+    basis = np.array([vector / np.linalg.norm(vector) for vector in vectors])
 
     # frontal axis
-    horizontal_dims = [0, 2]  # must be two dimensional. It means x and z axis are the horizontal axes.
-    horizontal_id = 0         # we rotate the x-axis (horizontal_dims[horizontal_id]) toward cam front.
-    frontal_basis = basis[0, : ]
-    frontal_basis, horizontal_id = rotate_towards_cam_front(frontal_basis, cam_front, horizontal_id)
+    horizontal_dims = [
+        0, 2
+    ]  # must be two dimensional. It means x and z axis are the horizontal axes.
+    horizontal_id = 0  # we rotate the x-axis (horizontal_dims[horizontal_id]) toward cam front.
+    frontal_basis = basis[0, :]
+    frontal_basis, horizontal_id = rotate_towards_cam_front(
+        frontal_basis, cam_front, horizontal_id)
 
-    up_basis = basis[1, : ]
+    up_basis = basis[1, :]
     right_basis = np.cross(frontal_basis, up_basis)
 
     frontal_coeff = coeffs[horizontal_dims[horizontal_id]]
     up_coeff = coeffs[1]
-    right_coeff = coeffs[horizontal_dims[1-horizontal_id]]
+    right_coeff = coeffs[horizontal_dims[1 - horizontal_id]]
 
     layout = {}
     layout['centroid'] = center
@@ -100,7 +112,12 @@ def get_layout_info(layout_3D, cam_front):
     return layout
 
 
-def correct_flipped_objects(obj_points, transform_matrix, model_path, voxels=None, sampled_points=None, flipped_objects_in_sunrgbd=[]):
+def correct_flipped_objects(obj_points,
+                            transform_matrix,
+                            model_path,
+                            voxels=None,
+                            sampled_points=None,
+                            flipped_objects_in_sunrgbd=[]):
     '''
     correct those wrongly labeled objects to correct orientation.
     :param obj_points: obj points
@@ -113,12 +130,10 @@ def correct_flipped_objects(obj_points, transform_matrix, model_path, voxels=Non
 
     if model_path.split('/')[-1] in flipped_objects_in_sunrgbd:
 
-        R = np.array([[-1.,  0.,  0.],
-                      [ 0.,  1.,  0.],
-                      [ 0.,  0., -1.]])
+        R = np.array([[-1., 0., 0.], [0., 1., 0.], [0., 0., -1.]])
         obj_points = obj_points.dot(R)
 
-        transform_matrix[:3,:3] = transform_matrix[:3,:3].dot(R)
+        transform_matrix[:3, :3] = transform_matrix[:3, :3].dot(R)
 
         if isinstance(voxels, np.ndarray):
             voxels = np.rot90(voxels, 2, (0, 2))
@@ -153,10 +168,10 @@ def proj_from_point_to_2d(_points, _K, _R):
     p_cam = p_cam.dot(T_cam.T)
 
     # delete those points whose depth value is non-positive.
-    invalid_ids = np.where(p_cam[:,2]<=0)[0]
+    invalid_ids = np.where(p_cam[:, 2] <= 0)[0]
     p_cam[invalid_ids, 2] = 0.0001
 
-    p_cam_h = p_cam/p_cam[:,2][:, None]
+    p_cam_h = p_cam / p_cam[:, 2][:, None]
     pixels = (K.dot(p_cam_h.T)).T
 
     if D_FLAG == 1:
@@ -166,18 +181,27 @@ def proj_from_point_to_2d(_points, _K, _R):
 
     return pixels, invalid_ids
 
+
 def get_corners_of_bb3d_no_index(basis, coeffs, centroid):
     corners = np.zeros((8, 3))
     coeffs = np.abs(coeffs)
-    corners[0, :] = - basis[0, :] * coeffs[0] + basis[1, :] * coeffs[1] - basis[2, :] * coeffs[2]
-    corners[1, :] = - basis[0, :] * coeffs[0] + basis[1, :] * coeffs[1] + basis[2, :] * coeffs[2]
-    corners[2, :] = + basis[0, :] * coeffs[0] + basis[1, :] * coeffs[1] + basis[2, :] * coeffs[2]
-    corners[3, :] = + basis[0, :] * coeffs[0] + basis[1, :] * coeffs[1] - basis[2, :] * coeffs[2]
+    corners[0, :] = -basis[0, :] * coeffs[0] + basis[1, :] * coeffs[1] - basis[
+        2, :] * coeffs[2]
+    corners[1, :] = -basis[0, :] * coeffs[0] + basis[1, :] * coeffs[1] + basis[
+        2, :] * coeffs[2]
+    corners[2, :] = +basis[0, :] * coeffs[0] + basis[1, :] * coeffs[1] + basis[
+        2, :] * coeffs[2]
+    corners[3, :] = +basis[0, :] * coeffs[0] + basis[1, :] * coeffs[1] - basis[
+        2, :] * coeffs[2]
 
-    corners[4, :] = - basis[0, :] * coeffs[0] - basis[1, :] * coeffs[1] - basis[2, :] * coeffs[2]
-    corners[5, :] = - basis[0, :] * coeffs[0] - basis[1, :] * coeffs[1] + basis[2, :] * coeffs[2]
-    corners[6, :] = + basis[0, :] * coeffs[0] - basis[1, :] * coeffs[1] + basis[2, :] * coeffs[2]
-    corners[7, :] = + basis[0, :] * coeffs[0] - basis[1, :] * coeffs[1] - basis[2, :] * coeffs[2]
+    corners[4, :] = -basis[0, :] * coeffs[0] - basis[1, :] * coeffs[1] - basis[
+        2, :] * coeffs[2]
+    corners[5, :] = -basis[0, :] * coeffs[0] - basis[1, :] * coeffs[1] + basis[
+        2, :] * coeffs[2]
+    corners[6, :] = +basis[0, :] * coeffs[0] - basis[1, :] * coeffs[1] + basis[
+        2, :] * coeffs[2]
+    corners[7, :] = +basis[0, :] * coeffs[0] - basis[1, :] * coeffs[1] - basis[
+        2, :] * coeffs[2]
     corners = corners + np.tile(centroid, (8, 1))
     return corners
 
@@ -219,10 +243,13 @@ def read_seg2d_data(seg2d_path):
         all_points_x = list(map(round, x))
         all_points_y = list(map(round, y))
 
-        seg_data = {'polygon':
-                        {'x': all_points_x,
-                         'y': all_points_y},
-                    'name': label}
+        seg_data = {
+            'polygon': {
+                'x': all_points_x,
+                'y': all_points_y
+            },
+            'name': label
+        }
 
         seg_list.append(seg_data)
 
@@ -231,7 +258,9 @@ def read_seg2d_data(seg2d_path):
 
 # class of SUNRGBD Data
 class SUNRGBDData(object):
-    def __init__(self, K, R_ex, R_tilt, bdb2d, bdb3d, gt3dcorner, imgdepth, imgrgb, seg2d, semantic_seg2d, manhattan_layout,
+
+    def __init__(self, K, R_ex, R_tilt, bdb2d, bdb3d, gt3dcorner, imgdepth,
+                 imgrgb, seg2d, semantic_seg2d, manhattan_layout,
                  sequence_name, sequence_id, scene_type):
         self._K = K
         # R_ex.T is the left-hand camera coordinates -> world coordinates transformation P_world = R_ex*P_camera
@@ -252,7 +281,8 @@ class SUNRGBDData(object):
         self._scene_type = scene_type
 
     def __str__(self):
-        return 'sequence_name: {}, sequence_id: {}'.format(self._sequence_name, self._sequence_id)
+        return 'sequence_name: {}, sequence_id: {}'.format(
+            self._sequence_name, self._sequence_id)
 
     def __repr__(self):
         return self.__str__()
@@ -321,6 +351,7 @@ class SUNRGBDData(object):
     def scene_type(self):
         return self._scene_type
 
+
 def readsunrgbdframe(config, image_name=None, image_id=None):
     clean_data_path = config.clean_data_root
     with open(os.path.join(clean_data_path, 'imagelist.txt'), 'r') as f:
@@ -328,14 +359,22 @@ def readsunrgbdframe(config, image_name=None, image_id=None):
     f.close()
     if image_name:
         image_id = image_list.index(image_name) + 1
-    with open(os.path.join(clean_data_path, 'data_all', str(image_id) + '.pickle'), 'rb') as f:
+    with open(
+            os.path.join(clean_data_path, 'data_all',
+                         str(image_id) + '.pickle'), 'rb') as f:
         img_info = pickle.load(f, encoding='latin1')
 
     # change data root manually
-    img_info['imgrgb_path'] = img_info['imgrgb_path'].replace('/home/siyuan/Documents/Dataset/SUNRGBD_ALL', config.data_root)
-    img_info['imgdepth_path'] = img_info['imgdepth_path'].replace('/home/siyuan/Documents/Dataset/SUNRGBD_ALL', config.data_root)
-    img_info['seg2d_path'] = os.path.join(os.path.dirname(os.path.dirname(img_info['imgdepth_path'])), 'annotation2Dfinal', 'index.json')
-    img_info['semantic_seg_path'] = os.path.join(config.data_root, 'SUNRGBD/train_test_labels', "img-{0:06d}.png".format(image_id))
+    img_info['imgrgb_path'] = img_info['imgrgb_path'].replace(
+        '/home/siyuan/Documents/Dataset/SUNRGBD_ALL', config.data_root)
+    img_info['imgdepth_path'] = img_info['imgdepth_path'].replace(
+        '/home/siyuan/Documents/Dataset/SUNRGBD_ALL', config.data_root)
+    img_info['seg2d_path'] = os.path.join(
+        os.path.dirname(os.path.dirname(img_info['imgdepth_path'])),
+        'annotation2Dfinal', 'index.json')
+    img_info['semantic_seg_path'] = os.path.join(
+        config.data_root, 'SUNRGBD/train_test_labels',
+        "img-{0:06d}.png".format(image_id))
     # load rgb img
     img_info['imgrgb'] = np.array(Image.open(img_info['imgrgb_path']))
 
@@ -356,9 +395,12 @@ def readsunrgbdframe(config, image_name=None, image_id=None):
         print(img_info['seg2d_path'])
     # img_info['seg2d'] = None
 
-    img_info['manhattan_layout'] = loadmat(os.path.join(sunrgbd_config.data_root, '3dlayout', str(image_id) + '.mat'))['manhattan_layout'].T
+    img_info['manhattan_layout'] = loadmat(
+        os.path.join(sunrgbd_config.data_root, '3dlayout',
+                     str(image_id) + '.mat'))['manhattan_layout'].T
 
-    scene_category_path = os.path.join(config.data_root, img_info['sequence_name'], 'scene.txt')
+    scene_category_path = os.path.join(config.data_root,
+                                       img_info['sequence_name'], 'scene.txt')
     if not os.path.exists(scene_category_path):
         scene_category = None
     else:
@@ -366,16 +408,21 @@ def readsunrgbdframe(config, image_name=None, image_id=None):
             scene_category = f.readline()
 
     # use updated R_tilt
-    R_tilt = loadmat(os.path.join(sunrgbd_config.data_root, 'updated_rtilt', str(image_id) + '.mat'))['r_tilt']
+    R_tilt = loadmat(
+        os.path.join(sunrgbd_config.data_root, 'updated_rtilt',
+                     str(image_id) + '.mat'))['r_tilt']
     R_ex = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]]).dot(R_tilt).dot(
         np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]]))
 
     img_info['R_tilt'] = R_tilt
     img_info['R_ex'] = R_ex
 
-    data_frame = SUNRGBDData(img_info['K'], img_info['R_ex'], img_info['R_tilt'], img_info['bdb2d'], img_info['bdb3d'],
-                             img_info['gt3dcorner'], img_info['imgdepth'], img_info['imgrgb'], img_info['seg2d'], img_info['semantic_seg_path'],
-                             img_info['manhattan_layout'], img_info['sequence_name'], image_id, scene_category)
+    data_frame = SUNRGBDData(
+        img_info['K'], img_info['R_ex'], img_info['R_tilt'], img_info['bdb2d'],
+        img_info['bdb3d'], img_info['gt3dcorner'], img_info['imgdepth'],
+        img_info['imgrgb'], img_info['seg2d'], img_info['semantic_seg_path'],
+        img_info['manhattan_layout'], img_info['sequence_name'], image_id,
+        scene_category)
     return data_frame
 
 
@@ -387,7 +434,6 @@ def cvt_R_ex_to_cam_R(R_ex):
     '''
     trans_mat = np.array([[0, 0, 1], [0, -1, 0], [1, 0, 0]])
     return (trans_mat.T).dot(R_ex).dot(trans_mat)
-
 
 
 def get_layout_bdb_from_corners(layout_t):
@@ -412,13 +458,15 @@ def get_layout_bdb_from_corners(layout_t):
     vector1 = normalize_point(vector1)
     vector2 = np.cross(vector1, [0, 1, 0])
 
-    centroid = np.array(
-        [points_2d[0, 0] + points_2d[3, 0], float(y_max) + float(y_min), points_2d[0, 2] + points_2d[3, 2]]) * 0.5
+    centroid = np.array([
+        points_2d[0, 0] + points_2d[3, 0],
+        float(y_max) + float(y_min), points_2d[0, 2] + points_2d[3, 2]
+    ]) * 0.5
 
     basis = np.array([vector1, [0, 1, 0], vector2])
-    coeffs = np.array([coeff1, y_max-y_min, coeff2]) * 0.5
+    coeffs = np.array([coeff1, y_max - y_min, coeff2]) * 0.5
     assert np.linalg.det(basis) > 0.
-    bdb = {'centroid':centroid, 'basis':basis, 'coeffs':coeffs}
+    bdb = {'centroid': centroid, 'basis': basis, 'coeffs': coeffs}
 
     return bdb
 
@@ -455,7 +503,8 @@ def check_bdb(bdb2d, m, n):
         -------
         valid: bool
     """
-    if bdb2d['x1'] >= bdb2d['x2'] or bdb2d['y1'] >= bdb2d['y2'] or bdb2d['x1'] > m or bdb2d['y1'] > n:
+    if bdb2d['x1'] >= bdb2d['x2'] or bdb2d['y1'] >= bdb2d['y2'] or bdb2d[
+            'x1'] > m or bdb2d['y1'] > n:
         return False
     else:
         return True
@@ -494,6 +543,7 @@ def cvt2nyu37class_map(inst_map, mapping):
 
     return class_map
 
+
 def get_inst_map(seg2d_data, cls_map):
     '''
     get 2D instance map from segmented polygons.
@@ -507,14 +557,21 @@ def get_inst_map(seg2d_data, cls_map):
 
     for inst_id, inst in enumerate(seg2d_data):
         mask = np.zeros_like(cls_map)
-        cv2.fillConvexPoly(mask, np.vstack([inst['polygon']['x'], inst['polygon']['y']]).T, 1)
-        labels, counts = np.unique(cls_map[np.nonzero(mask)], return_counts=True)
-        if len(counts) == 0 :
+        cv2.fillConvexPoly(
+            mask,
+            np.vstack([inst['polygon']['x'], inst['polygon']['y']]).T, 1)
+        labels, counts = np.unique(cls_map[np.nonzero(mask)],
+                                   return_counts=True)
+        if len(counts) == 0:
             continue
         inst_cls[inst_id + 1] = labels[counts.argmax()]
-        cv2.fillConvexPoly(inst_map, np.vstack([inst['polygon']['x'], inst['polygon']['y']]).T, inst_id + 1)
+        cv2.fillConvexPoly(
+            inst_map,
+            np.vstack([inst['polygon']['x'], inst['polygon']['y']]).T,
+            inst_id + 1)
 
     return inst_map, inst_cls
+
 
 def get_campact_layout(layout, depth_map, cam_K, cam_R, bdb3ds):
 
@@ -545,12 +602,17 @@ def get_campact_layout(layout, depth_map, cam_K, cam_R, bdb3ds):
     points_cloud = points_cam.dot(cam_R.T).dot(layout['basis'].T)
 
     # layout corners in layout system
-    layout_corners = get_corners_of_bb3d_no_index(layout['basis'], layout['coeffs'], layout['centroid']).dot(layout['basis'].T)
+    layout_corners = get_corners_of_bb3d_no_index(
+        layout['basis'], layout['coeffs'],
+        layout['centroid']).dot(layout['basis'].T)
 
     # instance corners in layout system
     instance_corners = []
     for bdb3d in bdb3ds:
-        instance_corners.append(get_corners_of_bb3d_no_index(bdb3d['basis'], bdb3d['coeffs'], bdb3d['centroid']).dot(layout['basis'].T))
+        instance_corners.append(
+            get_corners_of_bb3d_no_index(bdb3d['basis'], bdb3d['coeffs'],
+                                         bdb3d['centroid']).dot(
+                                             layout['basis'].T))
 
     if instance_corners:
 
@@ -558,13 +620,17 @@ def get_campact_layout(layout, depth_map, cam_K, cam_R, bdb3ds):
 
         # scope
         x_min = min(points_cloud[:, 0].min(), instance_corners[:, 0].min())
-        x_max = max(min(layout_corners[:, 0].max(), points_cloud[:, 0].max()), instance_corners[:, 0].max())
+        x_max = max(min(layout_corners[:, 0].max(), points_cloud[:, 0].max()),
+                    instance_corners[:, 0].max())
 
-        y_min = min(max(points_cloud[:, 1].min(), layout_corners[:, 1].min()), instance_corners[:, 1].min())
+        y_min = min(max(points_cloud[:, 1].min(), layout_corners[:, 1].min()),
+                    instance_corners[:, 1].min())
         y_max = y_min + 3.
 
-        z_min = min(max(layout_corners[:, 2].min(), points_cloud[:, 2].min()), instance_corners[:, 2].min())
-        z_max = max(min(layout_corners[:, 2].max(), points_cloud[:, 2].max()), instance_corners[:, 2].max())
+        z_min = min(max(layout_corners[:, 2].min(), points_cloud[:, 2].min()),
+                    instance_corners[:, 2].min())
+        z_max = max(min(layout_corners[:, 2].max(), points_cloud[:, 2].max()),
+                    instance_corners[:, 2].max())
 
     else:
         # scope
@@ -577,8 +643,10 @@ def get_campact_layout(layout, depth_map, cam_K, cam_R, bdb3ds):
         z_min = max(layout_corners[:, 2].min(), points_cloud[:, 2].min())
         z_max = min(layout_corners[:, 2].max(), points_cloud[:, 2].max())
 
-    new_layout_centroid = np.array([(x_min + x_max)/2., (y_min + y_max)/2., (z_min + z_max)/2.])
-    new_layout_coeffs = np.array([(x_max - x_min)/2., (y_max - y_min)/2., (z_max - z_min)/2.])
+    new_layout_centroid = np.array([(x_min + x_max) / 2., (y_min + y_max) / 2.,
+                                    (z_min + z_max) / 2.])
+    new_layout_coeffs = np.array([(x_max - x_min) / 2., (y_max - y_min) / 2.,
+                                  (z_max - z_min) / 2.])
 
     new_layout = deepcopy(layout)
 
@@ -586,6 +654,7 @@ def get_campact_layout(layout, depth_map, cam_K, cam_R, bdb3ds):
     new_layout['coeffs'] = new_layout_coeffs
 
     return new_layout
+
 
 def get_NYU37_class_id(names):
     '''
@@ -606,7 +675,8 @@ def get_NYU37_class_id(names):
 
         # match name in class_mapping
         name = name if name in Name_6585 else find_close_name(name, Name_6585)
-        nyu37class_dict[inst_id + 1] = class_mapping[class_mapping.Name_6585 == name].Label_37.item()
+        nyu37class_dict[inst_id + 1] = class_mapping[class_mapping.Name_6585 ==
+                                                     name].Label_37.item()
 
     return nyu37class_dict
 
@@ -648,30 +718,40 @@ def process_msk(bdb2ds, cls_masks, seg2d, flip_seg=False):
 
     if not flip_seg:
         for inst_id, inst in enumerate(seg2d):
-            if ('polygon' not in inst) or ('x' not in inst['polygon']) or ('y' not in inst['polygon']) or (
-            not inst['polygon']['x']) or (not inst['polygon']['y']):
+            if ('polygon' not in inst) or ('x' not in inst['polygon']) or (
+                    'y' not in inst['polygon']
+            ) or (not inst['polygon']['x']) or (not inst['polygon']['y']):
                 continue
 
             mask = np.zeros_like(cls_masks)
-            cv2.fillConvexPoly(mask, np.vstack([inst['polygon']['x'], inst['polygon']['y']]).T, 1)
-            labels, counts = np.unique(cls_masks[np.nonzero(mask)], return_counts=True)
-            if len(counts) == 0 :
+            cv2.fillConvexPoly(
+                mask,
+                np.vstack([inst['polygon']['x'], inst['polygon']['y']]).T, 1)
+            labels, counts = np.unique(cls_masks[np.nonzero(mask)],
+                                       return_counts=True)
+            if len(counts) == 0:
                 continue
             inst_cls.append(labels[counts.argmax()])
             inst_masks.append(mask)
     else:
 
         for inst_id, inst in enumerate(seg2d):
-            if ('polygon' not in inst) or ('x' not in inst['polygon']) or ('y' not in inst['polygon']) or len(
-                    inst['polygon']['x']) == 0 or len(inst['polygon']['y']) == 0:
+            if ('polygon' not in inst) or ('x' not in inst['polygon']) or (
+                    'y' not in inst['polygon']) or len(
+                        inst['polygon']['x']) == 0 or len(
+                            inst['polygon']['y']) == 0:
                 continue
 
             mask = np.zeros_like(cls_masks)
-            cv2.fillConvexPoly(mask,
-                               np.vstack([mask.shape[1] - 1 - np.array(inst['polygon']['x']), inst['polygon']['y']]).T,
-                               1)
-            labels, counts = np.unique(cls_masks[np.nonzero(mask)], return_counts=True)
-            if len(counts) == 0 :
+            cv2.fillConvexPoly(
+                mask,
+                np.vstack([
+                    mask.shape[1] - 1 - np.array(inst['polygon']['x']),
+                    inst['polygon']['y']
+                ]).T, 1)
+            labels, counts = np.unique(cls_masks[np.nonzero(mask)],
+                                       return_counts=True)
+            if len(counts) == 0:
                 continue
             inst_cls.append(labels[counts.argmax()])
             inst_masks.append(mask)
@@ -680,7 +760,9 @@ def process_msk(bdb2ds, cls_masks, seg2d, flip_seg=False):
 
     target_inst_masks = []
     for inst_id, bdb2d in enumerate(bdb2ds):
-        candidate_inst_ids = [idx for idx, cls in enumerate(inst_cls) if cls == bdb2d['class_id']]
+        candidate_inst_ids = [
+            idx for idx, cls in enumerate(inst_cls) if cls == bdb2d['class_id']
+        ]
 
         if not candidate_inst_ids:
             target_inst_masks.append(None)
@@ -688,23 +770,35 @@ def process_msk(bdb2ds, cls_masks, seg2d, flip_seg=False):
 
         candidate_inst_masks = inst_masks[candidate_inst_ids]
 
-        n_pixel_for_each_inst = np.sum(candidate_inst_masks.reshape(candidate_inst_masks.shape[0], -1), axis=1)
-        in_box_inst_masks = candidate_inst_masks[:, bdb2d['y1']:bdb2d['y2'] + 1, bdb2d['x1']:bdb2d['x2'] + 1]
-        n_in_box_pixel_for_each_inst = np.sum(in_box_inst_masks.reshape(in_box_inst_masks.shape[0], -1), axis=1)
-        in_box_ratio = n_in_box_pixel_for_each_inst/n_pixel_for_each_inst
+        n_pixel_for_each_inst = np.sum(candidate_inst_masks.reshape(
+            candidate_inst_masks.shape[0], -1),
+                                       axis=1)
+        in_box_inst_masks = candidate_inst_masks[:,
+                                                 bdb2d['y1']:bdb2d['y2'] + 1,
+                                                 bdb2d['x1']:bdb2d['x2'] + 1]
+        n_in_box_pixel_for_each_inst = np.sum(in_box_inst_masks.reshape(
+            in_box_inst_masks.shape[0], -1),
+                                              axis=1)
+        in_box_ratio = n_in_box_pixel_for_each_inst / n_pixel_for_each_inst
 
         if True not in (in_box_ratio >= 0.8):
             target_inst_masks.append(None)
             continue
 
-        target_inst_mask = candidate_inst_masks[in_box_ratio >= 0.8].sum(0).astype(np.bool)
+        target_inst_mask = candidate_inst_masks[in_box_ratio >= 0.8].sum(
+            0).astype(np.bool)
         locs = np.argwhere(target_inst_mask)
         y1, x1 = locs.min(0)
         y2, x2 = locs.max(0)
-        target_inst_mask = {'msk_bdb': [x1, y1, x2, y2], 'msk': target_inst_mask[y1:y2 + 1, x1:x2 + 1], 'class_id':bdb2d['class_id']}
+        target_inst_mask = {
+            'msk_bdb': [x1, y1, x2, y2],
+            'msk': target_inst_mask[y1:y2 + 1, x1:x2 + 1],
+            'class_id': bdb2d['class_id']
+        }
         target_inst_masks.append(target_inst_mask)
 
     return target_inst_masks
+
 
 def unprocess_bdb3d(bdb3ds, bdb3d_inv):
     trans_mat = np.array([[0., 0., 1.], [1., 0., 0.], [0., 1., 0.]])
@@ -729,6 +823,7 @@ def unprocess_bdb3d(bdb3ds, bdb3d_inv):
         bdb3ds_t.append(bdb3d_t)
     return bdb3ds_t
 
+
 def process_bdb3d(bdb3ds, inv=False):
     '''
     transform sunrgbd layout to toward-up-right form in world system.
@@ -743,12 +838,13 @@ def process_bdb3d(bdb3ds, inv=False):
         centroid = trans_mat.dot(bdb3d['centroid'][0])
         coeffs = bdb3d['coeffs'][0]
         basis = bdb3d['basis'].astype('float32')
-        vectors = trans_mat.dot((trans_mat.dot((np.diag(coeffs).dot(basis)).T)).T)
+        vectors = trans_mat.dot((trans_mat.dot(
+            (np.diag(coeffs).dot(basis)).T)).T)
 
         # let z-axis face forward (consistent with suncg data.)
         minv = np.array([[0., 0., -1.], [0., 1., 0.], [1., 0., 0.]])
         vectors = np.array([vectors[2], vectors[1], -vectors[0]])
-        if np.linalg.det(vectors)>0.:
+        if np.linalg.det(vectors) > 0.:
             vectors[0] = vectors[0]
         else:
             vectors[0] = -vectors[0]
@@ -756,9 +852,10 @@ def process_bdb3d(bdb3ds, inv=False):
 
         bdb3d_t = {}
         bdb3d_t['coeffs'] = np.linalg.norm(vectors, axis=1)
-        bdb3d_t['basis'] = np.array([normalize_point(vector) for vector in vectors])
+        bdb3d_t['basis'] = np.array(
+            [normalize_point(vector) for vector in vectors])
 
-        if np.linalg.det(vectors)<=0.:
+        if np.linalg.det(vectors) <= 0.:
             continue
 
         if inv:
@@ -787,8 +884,10 @@ def transform_to_world(layout, bdb3ds, cam_R, world_R):
     :return:
     '''
     new_layout = deepcopy(layout)
-    new_layout['centroid'] = layout['centroid'].dot(world_R)  # layout centroid in world system
-    new_layout['basis'] = layout['basis'].dot(world_R)  # layout vectors in world system
+    new_layout['centroid'] = layout['centroid'].dot(
+        world_R)  # layout centroid in world system
+    new_layout['basis'] = layout['basis'].dot(
+        world_R)  # layout vectors in world system
 
     new_cam_R = (world_R.T).dot(cam_R)
 
@@ -810,18 +909,24 @@ def flip_layout(layout, cam_R, cam_R_flip):
     '''
 
     # layout is the layout coordinates in world system (toward-up-right form).
-    centroid_flip = layout['centroid'].dot(cam_R)  # layout centroid in camera system
-    centroid_flip[2] = -1 * centroid_flip[2]    # flip right-coordinate values
-    centroid_flip = centroid_flip.dot(cam_R_flip.T)  # transform back to world system
+    centroid_flip = layout['centroid'].dot(
+        cam_R)  # layout centroid in camera system
+    centroid_flip[2] = -1 * centroid_flip[2]  # flip right-coordinate values
+    centroid_flip = centroid_flip.dot(
+        cam_R_flip.T)  # transform back to world system
 
-    vectors_flip = np.diag(layout['coeffs']).dot(layout['basis']).dot(cam_R) # layout vectors in camera system
-    vectors_flip[:,2] = -1 * vectors_flip[:,2] # flip right-coordinate values
-    vectors_flip = vectors_flip.dot(cam_R_flip.T) # transform back to world system
+    vectors_flip = np.diag(layout['coeffs']).dot(layout['basis']).dot(
+        cam_R)  # layout vectors in camera system
+    vectors_flip[:,
+                 2] = -1 * vectors_flip[:, 2]  # flip right-coordinate values
+    vectors_flip = vectors_flip.dot(
+        cam_R_flip.T)  # transform back to world system
 
     coeffs_flip = np.linalg.norm(vectors_flip, axis=1)
     basis_flip = np.array([normalize_point(vector) for vector in vectors_flip])
 
-    basis_flip[2, :] = basis_flip[2, :] if np.linalg.det(basis_flip)>0 else -basis_flip[2, :]
+    basis_flip[2, :] = basis_flip[
+        2, :] if np.linalg.det(basis_flip) > 0 else -basis_flip[2, :]
 
     bdb_flip = {}
     bdb_flip['basis'] = basis_flip
@@ -829,6 +934,7 @@ def flip_layout(layout, cam_R, cam_R_flip):
     bdb_flip['centroid'] = centroid_flip
 
     return bdb_flip
+
 
 def flip_bdb2d(bdb2ds, im_width):
 
@@ -846,25 +952,32 @@ def flip_bdb3d(bdb3ds, cam_R, cam_R_flip):
     bdb3ds_flip = deepcopy(bdb3ds)
 
     for bdb_idx, bdb3d in enumerate(bdb3ds):
-        centroid_flip = bdb3d['centroid'].dot(cam_R) # transform bdb centroid to camera system
-        centroid_flip[2] = -1 * centroid_flip[2] # flip right-coordinate
-        centroid_flip = centroid_flip.dot(cam_R_flip.T) # transform back to world system
+        centroid_flip = bdb3d['centroid'].dot(
+            cam_R)  # transform bdb centroid to camera system
+        centroid_flip[2] = -1 * centroid_flip[2]  # flip right-coordinate
+        centroid_flip = centroid_flip.dot(
+            cam_R_flip.T)  # transform back to world system
 
-        vectors_flip = np.diag(bdb3d['coeffs']).dot(bdb3d['basis']).dot(cam_R) # transform vectors to camera system
-        vectors_flip[:, 2] = -1 * vectors_flip[:, 2] # flip right-coordinate
-        vectors_flip = vectors_flip.dot(cam_R_flip.T) # transform back to world system
+        vectors_flip = np.diag(bdb3d['coeffs']).dot(bdb3d['basis']).dot(
+            cam_R)  # transform vectors to camera system
+        vectors_flip[:, 2] = -1 * vectors_flip[:, 2]  # flip right-coordinate
+        vectors_flip = vectors_flip.dot(
+            cam_R_flip.T)  # transform back to world system
 
         coeffs_flip = np.linalg.norm(vectors_flip, axis=1)
-        basis_flip = np.array([normalize_point(vector) for vector in vectors_flip])
+        basis_flip = np.array(
+            [normalize_point(vector) for vector in vectors_flip])
 
         # keep the basis_flip[2,:] vector, because it stands for the forward direction of an object.
-        basis_flip[0, :] = basis_flip[0, :] if np.linalg.det(basis_flip) > 0 else -basis_flip[0, :]
+        basis_flip[0, :] = basis_flip[
+            0, :] if np.linalg.det(basis_flip) > 0 else -basis_flip[0, :]
 
         bdb3ds_flip[bdb_idx]['basis'] = basis_flip
         bdb3ds_flip[bdb_idx]['coeffs'] = coeffs_flip
         bdb3ds_flip[bdb_idx]['centroid'] = centroid_flip
 
     return bdb3ds_flip
+
 
 def process_sunrgbd_frame(sample, flip=False):
     '''
@@ -875,35 +988,44 @@ def process_sunrgbd_frame(sample, flip=False):
     # TODO: define global coordinate system
     if not flip:
         cam_K = sample.K
-        cam_R = cvt_R_ex_to_cam_R(sample.R_ex) # camera_rotation matrix in world system
+        cam_R = cvt_R_ex_to_cam_R(
+            sample.R_ex)  # camera_rotation matrix in world system
 
         # define a world system
         world_R = get_world_R(cam_R)
 
-        layout = process_layout(sample.manhattan_layout) # layout bbox in world system
+        layout = process_layout(
+            sample.manhattan_layout)  # layout bbox in world system
 
         centroid = layout['centroid']
         vectors = np.diag(layout['coeffs']).dot(layout['basis'])
 
         # Set all points relative to layout orientation. (i.e. let layout orientation to be the world system.)
         # The forward direction (x-axis) of layout orientation should point toward camera forward direction.
-        layout_3D = get_layout_info({'centroid': centroid, 'vectors': vectors}, cam_R[:, 0])
+        layout_3D = get_layout_info({
+            'centroid': centroid,
+            'vectors': vectors
+        }, cam_R[:, 0])
         lo_inv = np.matmul(layout['basis'], np.linalg.inv(layout_3D['basis']))
 
-        bdb2ds = process_bdb2d(check_bdb2d(sample.bdb2d, sample.imgrgb.shape), sample.imgrgb.shape)
+        bdb2ds = process_bdb2d(check_bdb2d(sample.bdb2d, sample.imgrgb.shape),
+                               sample.imgrgb.shape)
         masks = np.array(Image.open(sample.semantic_seg2d))
         masks = process_msk(bdb2ds, masks, sample.seg2d, flip_seg=False)
-        bdb3ds_ws, bdb3d_inv, bdb3ds_o = process_bdb3d(sample.bdb3d, inv=True) # bdb3d in old world system
+        bdb3ds_ws, bdb3d_inv, bdb3ds_o = process_bdb3d(
+            sample.bdb3d, inv=True)  # bdb3d in old world system
 
         # transform everything to world system
         world_R_inv = np.linalg.inv(world_R)
-        layout_3D, bdb3ds_ws, cam_R = transform_to_world(layout_3D, bdb3ds_ws, cam_R, world_R)
+        layout_3D, bdb3ds_ws, cam_R = transform_to_world(
+            layout_3D, bdb3ds_ws, cam_R, world_R)
 
-        instance_info_list = {} # bdb2d and bdb3d in layout system
+        instance_info_list = {}  # bdb2d and bdb3d in layout system
 
         instance_info_list['bdb2d'] = bdb2ds
         instance_info_list['bdb3d'] = bdb3ds_ws
         instance_info_list['inst_masks'] = masks
+
         # layout_3D = get_campact_layout(layout_3D, sample.imgdepth, cam_K, cam_R, bdb3ds_ws)
 
         # invert total3d gt back to co
@@ -915,15 +1037,17 @@ def process_sunrgbd_frame(sample, flip=False):
 
         lo_inv = remove_error(lo_inv)
 
-        layout_3D_co, bdb3ds_ws_co, cam_R_co = transform_to_world(layout_3D, bdb3ds_ws, cam_R, world_R_inv)
+        layout_3D_co, bdb3ds_ws_co, cam_R_co = transform_to_world(
+            layout_3D, bdb3ds_ws, cam_R, world_R_inv)
 
         cam_R_co = cvt_R_ex_to_cam_R(cam_R_co)
         assert (sample.R_ex - cam_R_co).mean() < 0.0001
 
         layout_3D_co['basis'] = np.matmul(lo_inv, layout_3D_co['basis'])
         layout_3D_co['coeffs'] = np.matmul(lo_inv, layout_3D_co['coeffs'])
-        layout_3D_co = get_corners_of_bb3d_no_index(
-            layout_3D_co['basis'], layout_3D_co['coeffs'], layout_3D_co['centroid'])
+        layout_3D_co = get_corners_of_bb3d_no_index(layout_3D_co['basis'],
+                                                    layout_3D_co['coeffs'],
+                                                    layout_3D_co['centroid'])
         trans_mat = np.array([[0., 0., 1.], [1., 0., 0.], [0., 1., 0.]])
         layout_3D_co = (trans_mat.dot(layout_3D_co.T)).T
 
@@ -933,36 +1057,47 @@ def process_sunrgbd_frame(sample, flip=False):
             assert (b1['coeffs'] - b2['coeffs']).mean() < 0.0001
             assert (b1['centroid'] - b2['centroid']).mean() < 0.0001
 
-        frame = SUNRGBD_DATA(cam_K, cam_R, sample.scene_type, sample.imgrgb, sample.imgdepth, layout_3D, sample.sequence_id,
-                           sample.sequence_name, instance_info_list, world_R_inv, lo_inv, bdb3d_inv)
+        frame = SUNRGBD_DATA(cam_K, cam_R, sample.scene_type, sample.imgrgb,
+                             sample.imgdepth, layout_3D, sample.sequence_id,
+                             sample.sequence_name, instance_info_list,
+                             world_R_inv, lo_inv, bdb3d_inv)
     else:
         img_shape = sample.imgrgb.shape[:2]
 
         cam_K_flip = deepcopy(sample.K)
-        cam_K_flip[0][2] = img_shape[1] - cam_K_flip[0][2] # flip cam_K
+        cam_K_flip[0][2] = img_shape[1] - cam_K_flip[0][2]  # flip cam_K
 
         # camera vectors in world system.
-        cam_R = cvt_R_ex_to_cam_R(sample.R_ex) # camera_rotation matrix in world system
+        cam_R = cvt_R_ex_to_cam_R(
+            sample.R_ex)  # camera_rotation matrix in world system
         _, pitch, roll = yaw_pitch_roll_from_R(cam_R)
         # flip camera R
         cam_R_flip = R_from_yaw_pitch_roll(0, pitch, -roll)
 
         # get ordinary layout first in world system.
-        layout = process_layout(sample.manhattan_layout)  # layout bbox in world system
+        layout = process_layout(
+            sample.manhattan_layout)  # layout bbox in world system
 
         centroid = layout['centroid']
         vectors = np.diag(layout['coeffs']).dot(layout['basis'])
 
         # The forward direction (x-axis) of layout orientation should point toward camera forward direction.
-        layout_3D = get_layout_info({'centroid': centroid, 'vectors': vectors}, cam_R[:, 0])
+        layout_3D = get_layout_info({
+            'centroid': centroid,
+            'vectors': vectors
+        }, cam_R[:, 0])
 
         # flip layout (we now need to horienzontally flip layout in camera system first and transform it back to world system.)
-        layout_3D_flip = flip_layout(layout_3D, cam_R, cam_R_flip) # flipped layout bbox in world system
+        layout_3D_flip = flip_layout(
+            layout_3D, cam_R,
+            cam_R_flip)  # flipped layout bbox in world system
 
         # Set all points relative to layout orientation. (i.e. let layout orientation to be the world system.)
-        bdb2ds = process_bdb2d(check_bdb2d(sample.bdb2d, sample.imgrgb.shape), sample.imgrgb.shape)
+        bdb2ds = process_bdb2d(check_bdb2d(sample.bdb2d, sample.imgrgb.shape),
+                               sample.imgrgb.shape)
         bdb2ds_flip = flip_bdb2d(bdb2ds, sample.imgrgb.shape[1])
-        masks = np.array(Image.open(sample.semantic_seg2d).transpose(Image.FLIP_LEFT_RIGHT))
+        masks = np.array(
+            Image.open(sample.semantic_seg2d).transpose(Image.FLIP_LEFT_RIGHT))
         masks = process_msk(bdb2ds_flip, masks, sample.seg2d, flip_seg=True)
         bdb3ds_ws = process_bdb3d(sample.bdb3d)  # bdb3d in world system
         bdb3ds_ws_flip = flip_bdb3d(bdb3ds_ws, cam_R, cam_R_flip)
@@ -977,9 +1112,13 @@ def process_sunrgbd_frame(sample, flip=False):
         # layout_3D_flip = get_campact_layout(layout_3D_flip, depth_img_flip, cam_K_flip, cam_R_flip, bdb3ds_ws_flip)
 
         # flip image in the end.
-        rgb_img = np.array(Image.fromarray(sample.imgrgb).transpose(Image.FLIP_LEFT_RIGHT))
-        depth_map = np.array(Image.fromarray(sample.imgdepth).transpose(Image.FLIP_LEFT_RIGHT))
-        frame = SUNRGBD_DATA(cam_K_flip, cam_R_flip, sample.scene_type, rgb_img, depth_map, layout_3D_flip,
-                             sample.sequence_id, sample.sequence_name, instance_info_list)
+        rgb_img = np.array(
+            Image.fromarray(sample.imgrgb).transpose(Image.FLIP_LEFT_RIGHT))
+        depth_map = np.array(
+            Image.fromarray(sample.imgdepth).transpose(Image.FLIP_LEFT_RIGHT))
+        frame = SUNRGBD_DATA(cam_K_flip, cam_R_flip, sample.scene_type,
+                             rgb_img, depth_map, layout_3D_flip,
+                             sample.sequence_id, sample.sequence_name,
+                             instance_info_list)
 
     return frame

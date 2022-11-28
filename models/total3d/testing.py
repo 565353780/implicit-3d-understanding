@@ -10,7 +10,7 @@ from configs.data_config import NYU37_TO_PIX3D_CLS_MAPPING
 from models.eval_metrics import get_iou_cuboid
 from net_utils.libs import get_layout_bdb_sunrgbd, get_rotation_matix_result, get_bdb_evaluation, get_bdb_2d_result, get_corners_of_bb3d_no_index, get_iou
 from scipy.io import savemat
-from libs.tools import write_obj
+from Lib.tools import write_obj
 import numpy as np
 from utils.sunrgbd_utils import get_layout_bdb_from_corners, transform_to_world, cvt_R_ex_to_cam_R, unprocess_bdb3d
 

@@ -6,11 +6,11 @@ from models.testing import BaseTester
 import torch
 from .training import Trainer
 from external.pyTorchChamferDistance.chamfer_distance import ChamferDistance
-from libs.tools import write_obj
+from Lib.tools import write_obj
 dist_chamfer = ChamferDistance()
 from external.ldif.inference.metrics import mesh_chamfer_via_points
 from external.ldif.util.file_util import read_mesh
-from libs.tools import read_obj, sample_pnts_from_obj, normalize_to_unit_square
+from Lib.tools import read_obj, sample_pnts_from_obj, normalize_to_unit_square
 import trimesh
 import numpy as np
 import tempfile

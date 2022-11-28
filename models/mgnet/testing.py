@@ -6,7 +6,7 @@ from models.testing import BaseTester
 import torch
 from .training import Trainer
 from external.pyTorchChamferDistance.chamfer_distance import ChamferDistance
-from libs.tools import write_obj
+from Lib.tools import write_obj
 dist_chamfer = ChamferDistance()
 
 

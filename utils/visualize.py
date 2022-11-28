@@ -1,4 +1,5 @@
 import sys
+
 sys.path.append('.')
 import argparse
 from utils.sunrgbd_config import SUNRGBD_CONFIG
@@ -7,7 +8,7 @@ import json
 import pickle
 from configs.data_config import Config, NYU40CLASSES
 import numpy as np
-from libs.tools import R_from_yaw_pitch_roll
+from Lib.tools import R_from_yaw_pitch_roll
 import scipy.io as sio
 from glob import glob
 import vtk
@@ -30,10 +31,13 @@ def num_from_bins(bins, cls, reg):
     bin_center = (bins[cls, 0] + bins[cls, 1]) / 2
     return bin_center + reg * bin_width
 
+
 def get_rotation_matrix(cam_data, bin):
 
-    pitch = num_from_bins(np.array(bin['pitch_bin']), cam_data['pitch_cls'], cam_data['pitch_reg'])
-    roll = num_from_bins(np.array(bin['roll_bin']), cam_data['roll_cls'], cam_data['roll_reg'])
+    pitch = num_from_bins(np.array(bin['pitch_bin']), cam_data['pitch_cls'],
+                          cam_data['pitch_reg'])
+    roll = num_from_bins(np.array(bin['roll_bin']), cam_data['roll_cls'],
+                         cam_data['roll_reg'])
     R = R_from_yaw_pitch_roll(0., pitch, roll)
 
     return R
@@ -62,7 +66,8 @@ def format_mesh(obj_files, bboxes):
         points = points - mesh_center
 
         mesh_coef = (points.max(0) - points.min(0)) / 2.
-        points = points.dot(np.diag(1./mesh_coef)).dot(np.diag(bboxes['coeffs'][obj_idx]))
+        points = points.dot(np.diag(1. / mesh_coef)).dot(
+            np.diag(bboxes['coeffs'][obj_idx]))
 
         # set orientation
         points = points.dot(bboxes['basis'][obj_idx])
@@ -77,6 +82,7 @@ def format_mesh(obj_files, bboxes):
         vtk_objects[obj_idx] = object
 
     return vtk_objects, bboxes
+
 
 def get_bdb_form_from_corners(corners):
     vec_0 = (corners[:, 2, :] - corners[:, 1, :]) / 2.
@@ -97,6 +103,7 @@ def get_bdb_form_from_corners(corners):
     basis = np.stack([basis_0, basis_1, basis_2], axis=1)
 
     return {'basis': basis, 'coeffs': coeffs, 'centroid': centroid}
+
 
 def format_bbox(box, type):
 
@@ -129,6 +136,7 @@ def format_bbox(box, type):
 
     return boxes
 
+
 def format_layout(layout_data):
 
     layout_bdb = {}
@@ -137,15 +145,15 @@ def format_layout(layout_data):
 
     vector_z = (layout_data[1] - layout_data[0]) / 2.
     coeff_z = np.linalg.norm(vector_z)
-    basis_z = vector_z/coeff_z
+    basis_z = vector_z / coeff_z
 
     vector_x = (layout_data[2] - layout_data[1]) / 2.
     coeff_x = np.linalg.norm(vector_x)
-    basis_x = vector_x/coeff_x
+    basis_x = vector_x / coeff_x
 
     vector_y = (layout_data[0] - layout_data[4]) / 2.
     coeff_y = np.linalg.norm(vector_y)
-    basis_y = vector_y/coeff_y
+    basis_y = vector_y / coeff_y
 
     basis = np.array([basis_x, basis_y, basis_z])
     coeffs = np.array([coeff_x, coeff_y, coeff_z])
@@ -159,7 +167,9 @@ def format_layout(layout_data):
 
 class Box(Scene3D):
 
-    def __init__(self, img_map, depth_map, cam_K, gt_cam_R, pre_cam_R, gt_layout, pre_layout, gt_boxes, pre_boxes, type, output_mesh):
+    def __init__(self, img_map, depth_map, cam_K, gt_cam_R, pre_cam_R,
+                 gt_layout, pre_layout, gt_boxes, pre_boxes, type,
+                 output_mesh):
         super(Scene3D, self).__init__()
         self._cam_K = cam_K
         self.gt_cam_R = gt_cam_R
@@ -181,14 +191,21 @@ class Box(Scene3D):
             boxes = self.pre_boxes
         else:
             boxes = self.gt_boxes
-        return len([class_id for class_id in boxes['class_id'] if class_id in RECON_3D_CLS])
+        return len([
+            class_id for class_id in boxes['class_id']
+            if class_id in RECON_3D_CLS
+        ])
 
-    def draw_projected_bdb3d(self, type = 'prediction', if_save = True, save_path=''):
+    def draw_projected_bdb3d(self,
+                             type='prediction',
+                             if_save=True,
+                             save_path=''):
         from PIL import Image, ImageDraw, ImageFont
 
         img_map = Image.fromarray(self.img_map[:])
         antialias = 4
-        img_map = img_map.resize([s * antialias for s in img_map.size], Image.ANTIALIAS)
+        img_map = img_map.resize([s * antialias for s in img_map.size],
+                                 Image.ANTIALIAS)
 
         draw = ImageDraw.Draw(img_map)
 
@@ -201,37 +218,62 @@ class Box(Scene3D):
             boxes = self.gt_boxes
             cam_R = self.gt_cam_R
 
-        for coeffs, centroid, class_id, basis in zip(boxes['coeffs'], boxes['centroid'], boxes['class_id'], boxes['basis']):
+        for coeffs, centroid, class_id, basis in zip(boxes['coeffs'],
+                                                     boxes['centroid'],
+                                                     boxes['class_id'],
+                                                     boxes['basis']):
             if class_id == 0:
                 continue
             # if class_id not in RECON_3D_CLS:
             #     continue
-            center_from_3D, invalid_ids = proj_from_point_to_2d(centroid, self.cam_K, cam_R)
-            bdb3d_corners = get_corners_of_bb3d_no_index(basis, coeffs, centroid)
-            bdb2D_from_3D = proj_from_point_to_2d(bdb3d_corners, self.cam_K, cam_R)[0] * antialias
+            center_from_3D, invalid_ids = proj_from_point_to_2d(
+                centroid, self.cam_K, cam_R)
+            bdb3d_corners = get_corners_of_bb3d_no_index(
+                basis, coeffs, centroid)
+            bdb2D_from_3D = proj_from_point_to_2d(bdb3d_corners, self.cam_K,
+                                                  cam_R)[0] * antialias
 
             # bdb2D_from_3D = np.round(bdb2D_from_3D).astype('int32')
             bdb2D_from_3D = [tuple(item) for item in bdb2D_from_3D]
 
-            color = [c * 8/9 for c in nyu_color_palette[class_id]]
+            color = [c * 8 / 9 for c in nyu_color_palette[class_id]]
 
-            draw.line([bdb2D_from_3D[0], bdb2D_from_3D[1], bdb2D_from_3D[2], bdb2D_from_3D[3], bdb2D_from_3D[0]],
-                      fill=(int(color[0] * 255), int(color[1] * 255), int(color[2] * 255)), width=width)
-            draw.line([bdb2D_from_3D[4], bdb2D_from_3D[5], bdb2D_from_3D[6], bdb2D_from_3D[7], bdb2D_from_3D[4]],
-                      fill=(int(color[0] * 255), int(color[1] * 255), int(color[2] * 255)), width=width)
+            draw.line([
+                bdb2D_from_3D[0], bdb2D_from_3D[1], bdb2D_from_3D[2],
+                bdb2D_from_3D[3], bdb2D_from_3D[0]
+            ],
+                      fill=(int(color[0] * 255), int(color[1] * 255),
+                            int(color[2] * 255)),
+                      width=width)
+            draw.line([
+                bdb2D_from_3D[4], bdb2D_from_3D[5], bdb2D_from_3D[6],
+                bdb2D_from_3D[7], bdb2D_from_3D[4]
+            ],
+                      fill=(int(color[0] * 255), int(color[1] * 255),
+                            int(color[2] * 255)),
+                      width=width)
             draw.line([bdb2D_from_3D[0], bdb2D_from_3D[4]],
-                      fill=(int(color[0] * 255), int(color[1] * 255), int(color[2] * 255)), width=width)
+                      fill=(int(color[0] * 255), int(color[1] * 255),
+                            int(color[2] * 255)),
+                      width=width)
             draw.line([bdb2D_from_3D[1], bdb2D_from_3D[5]],
-                      fill=(int(color[0] * 255), int(color[1] * 255), int(color[2] * 255)), width=width)
+                      fill=(int(color[0] * 255), int(color[1] * 255),
+                            int(color[2] * 255)),
+                      width=width)
             draw.line([bdb2D_from_3D[2], bdb2D_from_3D[6]],
-                      fill=(int(color[0] * 255), int(color[1] * 255), int(color[2] * 255)), width=width)
+                      fill=(int(color[0] * 255), int(color[1] * 255),
+                            int(color[2] * 255)),
+                      width=width)
             draw.line([bdb2D_from_3D[3], bdb2D_from_3D[7]],
-                      fill=(int(color[0] * 255), int(color[1] * 255), int(color[2] * 255)), width=width)
+                      fill=(int(color[0] * 255), int(color[1] * 255),
+                            int(color[2] * 255)),
+                      width=width)
 
             # draw.text(tuple(center_from_3D), NYU40CLASSES[class_id],
             #           fill=(int(color[0] * 255), int(color[1] * 255), int(color[2] * 255)), font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 20))
 
-        img_map = img_map.resize([s // antialias for s in img_map.size], Image.ANTIALIAS)
+        img_map = img_map.resize([s // antialias for s in img_map.size],
+                                 Image.ANTIALIAS)
         # img_map.show()
 
         if if_save:
@@ -240,16 +282,25 @@ class Box(Scene3D):
             img_map.save(save_path)
 
     def get_bbox_actor(self, box, color, opacity):
-        vectors = [box['coeffs'][basis_id] * basis for basis_id, basis in enumerate(box['basis'])]
+        vectors = [
+            box['coeffs'][basis_id] * basis
+            for basis_id, basis in enumerate(box['basis'])
+        ]
         corners, faces = self.get_box_corners(box['centroid'], vectors)
-        bbox_actor = self.set_actor(self.set_mapper(self.set_cube_prop(corners, faces, color), 'box'))
+        bbox_actor = self.set_actor(
+            self.set_mapper(self.set_cube_prop(corners, faces, color), 'box'))
         bbox_actor.GetProperty().SetOpacity(opacity)
         return bbox_actor
 
     def get_bbox_line_actor(self, box, color, opacity, width=10):
-        vectors = [box['coeffs'][basis_id] * basis for basis_id, basis in enumerate(box['basis'])]
+        vectors = [
+            box['coeffs'][basis_id] * basis
+            for basis_id, basis in enumerate(box['basis'])
+        ]
         corners, faces = self.get_box_corners(box['centroid'], vectors)
-        bbox_actor = self.set_actor(self.set_mapper(self.set_bbox_line_actor(corners, faces, color), 'box'))
+        bbox_actor = self.set_actor(
+            self.set_mapper(self.set_bbox_line_actor(corners, faces, color),
+                            'box'))
         bbox_actor.GetProperty().SetOpacity(opacity)
         bbox_actor.GetProperty().SetLineWidth(width)
         return bbox_actor
@@ -266,7 +317,9 @@ class Box(Scene3D):
         voxel_actors = []
         for point in voxels:
             corners, faces = self.get_box_corners(point, voxel_vector)
-            voxel_actor = self.set_actor(self.set_mapper(self.set_cube_prop(corners, faces, color), 'box'))
+            voxel_actor = self.set_actor(
+                self.set_mapper(self.set_cube_prop(corners, faces, color),
+                                'box'))
             voxel_actors.append(voxel_actor)
         return voxel_actors
 
@@ -276,7 +329,6 @@ class Box(Scene3D):
 
         # '''draw layout system'''
         # renderer.AddActor(self.set_axes_actor())
-
         '''draw gt camera orientation'''
         if self.mode == 'gt' or self.mode == 'both':
             color = [[1., 0., 0.], [1., 0., 0.], [1., 0., 0.]]
@@ -289,7 +341,6 @@ class Box(Scene3D):
             '''set camera property'''
             camera = self.set_camera(center, vectors, self.cam_K)
             renderer.SetActiveCamera(camera)
-
         '''draw predicted camera orientation'''
         if self.mode == 'prediction' or self.mode == 'both':
             color = [[0., 1., 1.], [1., 0., 1.], [1., 1., 0.]]
@@ -302,68 +353,83 @@ class Box(Scene3D):
             '''set camera property'''
             camera = self.set_camera(center, vectors, self.cam_K)
             renderer.SetActiveCamera(camera)
-
         '''draw gt layout'''
         if self.mode == 'gt' or self.mode == 'both':
             color = (255, 0, 0)
             opacity = 0.2
             layout_actor = self.get_bbox_actor(self.gt_layout, color, opacity)
             renderer.AddActor(layout_actor)
-            layout_line_actor = self.get_bbox_line_actor(self.gt_layout, color, 1.)
+            layout_line_actor = self.get_bbox_line_actor(
+                self.gt_layout, color, 1.)
             renderer.AddActor(layout_line_actor)
-
         '''draw predicted layout'''
         if self.mode == 'prediction' or self.mode == 'both':
             color = (75, 75, 75)
             opacity = 0.2
             layout_actor = self.get_bbox_actor(self.pre_layout, color, opacity)
             renderer.AddActor(layout_actor)
-            layout_line_actor = self.get_bbox_line_actor(self.pre_layout, (75,75,75), 1.)
+            layout_line_actor = self.get_bbox_line_actor(
+                self.pre_layout, (75, 75, 75), 1.)
             renderer.AddActor(layout_line_actor)
-
         '''draw gt obj bounding boxes'''
         if self.mode == 'gt' or self.mode == 'both':
-            for coeffs, centroid, class_id, basis in zip(self.gt_boxes['coeffs'],
-                                                         self.gt_boxes['centroid'],
-                                                         self.gt_boxes['class_id'],
-                                                         self.gt_boxes['basis']):
+            for coeffs, centroid, class_id, basis in zip(
+                    self.gt_boxes['coeffs'], self.gt_boxes['centroid'],
+                    self.gt_boxes['class_id'], self.gt_boxes['basis']):
                 if class_id not in RECON_3D_CLS:
                     continue
                 color = [1., 0., 0.]
                 opacity = 0.2
-                box = {'coeffs':coeffs, 'centroid':centroid, 'class_id':class_id, 'basis':basis}
+                box = {
+                    'coeffs': coeffs,
+                    'centroid': centroid,
+                    'class_id': class_id,
+                    'basis': basis
+                }
                 bbox_actor = self.get_bbox_actor(box, color, opacity)
                 renderer.AddActor(bbox_actor)
 
                 # draw orientations
-                color = [[0.8, 0.8, 0.8],[0.8, 0.8, 0.8],[1., 0., 0.]]
-                vectors = [box['coeffs'][v_id] * vector for v_id, vector in enumerate(box['basis'])]
+                color = [[0.8, 0.8, 0.8], [0.8, 0.8, 0.8], [1., 0., 0.]]
+                vectors = [
+                    box['coeffs'][v_id] * vector
+                    for v_id, vector in enumerate(box['basis'])
+                ]
 
                 for index in range(3):
-                    arrow_actor = self.get_orientation_actor(box['centroid'], vectors[index], color[index])
+                    arrow_actor = self.get_orientation_actor(
+                        box['centroid'], vectors[index], color[index])
                     renderer.AddActor(arrow_actor)
-
         '''draw predicted obj bounding boxes'''
         if self.mode == 'prediction' or self.mode == 'both':
-            for coeffs, centroid, class_id, basis in zip(self.pre_boxes['coeffs'],
-                                                         self.pre_boxes['centroid'],
-                                                         self.pre_boxes['class_id'],
-                                                         self.pre_boxes['basis']):
-                if class_id not in RECON_3D_CLS:
-                    continue
-                color = nyu_color_palette[class_id]
-                opacity = 0.2
-                box = {'coeffs':coeffs, 'centroid':centroid, 'class_id':class_id, 'basis':basis}
-                bbox_actor = self.get_bbox_actor(box, color, opacity)
-                renderer.AddActor(bbox_actor)
+            if self.pre_boxes is not None:
+                for coeffs, centroid, class_id, basis in zip(
+                        self.pre_boxes['coeffs'], self.pre_boxes['centroid'],
+                        self.pre_boxes['class_id'], self.pre_boxes['basis']):
+                    if class_id not in RECON_3D_CLS:
+                        continue
+                    color = nyu_color_palette[class_id]
+                    opacity = 0.2
+                    box = {
+                        'coeffs': coeffs,
+                        'centroid': centroid,
+                        'class_id': class_id,
+                        'basis': basis
+                    }
+                    bbox_actor = self.get_bbox_actor(box, color, opacity)
+                    renderer.AddActor(bbox_actor)
 
-                # draw orientations
-                color = [[0.8, 0.8, 0.8],[0.8, 0.8, 0.8],[1., 0., 0.]]
-                vectors = [box['coeffs'][v_id] * vector for v_id, vector in enumerate(box['basis'])]
+                    # draw orientations
+                    color = [[0.8, 0.8, 0.8], [0.8, 0.8, 0.8], [1., 0., 0.]]
+                    vectors = [
+                        box['coeffs'][v_id] * vector
+                        for v_id, vector in enumerate(box['basis'])
+                    ]
 
-                for index in range(3):
-                    arrow_actor = self.get_orientation_actor(box['centroid'], vectors[index], color[index])
-                    renderer.AddActor(arrow_actor)
+                    for index in range(3):
+                        arrow_actor = self.get_orientation_actor(
+                            box['centroid'], vectors[index], color[index])
+                        renderer.AddActor(arrow_actor)
 
         # draw mesh
         if self.mode == 'prediction' and self.output_mesh:
@@ -410,26 +476,46 @@ class Box(Scene3D):
             writer.SetFileName(save_path)
             writer.Write()
 
+
 def parse_args():
     '''PARAMETERS'''
-    parser = argparse.ArgumentParser(description='3D visualization of Total3D results.')
-    parser.add_argument('--result_path', type=str, default='out/total3d/joint_train_new/visualization',
+    parser = argparse.ArgumentParser(
+        description='3D visualization of Total3D results.')
+    parser.add_argument('--result_path',
+                        type=str,
+                        default='out/total3d/joint_train_new/visualization',
                         help='Results exported from test.py.')
-    parser.add_argument('--sequence_id', type=int, default=274,
-                        help='Give the sequence id in test set you want to visualize.')
-    parser.add_argument('--save_path', type=str, default=None,
+    parser.add_argument(
+        '--sequence_id',
+        type=int,
+        default=274,
+        help='Give the sequence id in test set you want to visualize.')
+    parser.add_argument('--save_path',
+                        type=str,
+                        default=None,
                         help='Save results folder.')
-    parser.add_argument('--search_folder', type=str, default=None,
+    parser.add_argument('--search_folder',
+                        type=str,
+                        default=None,
                         help='Selected image folder.')
-    parser.add_argument('--offscreen', action='store_true', default=False,
+    parser.add_argument('--offscreen',
+                        action='store_true',
+                        default=False,
                         help='Render offscreen.')
-    parser.add_argument('--min_obj', type=int, default=0,
+    parser.add_argument('--min_obj',
+                        type=int,
+                        default=0,
                         help='Min number of objects.')
-    parser.add_argument('--max_obj', type=int, default=1000,
+    parser.add_argument('--max_obj',
+                        type=int,
+                        default=1000,
                         help='Max number of objects.')
-    parser.add_argument('--gt', action='store_true', default=False,
+    parser.add_argument('--gt',
+                        action='store_true',
+                        default=False,
                         help='Render offscreen.')
     return parser.parse_args()
+
 
 if __name__ == '__main__':
     args = parse_args()
@@ -447,7 +533,8 @@ if __name__ == '__main__':
         else:
             if_save = True
 
-        test_file = 'data/sunrgbd/sunrgbd_train_test_data/' + str(sequence_id) + '.pkl'
+        test_file = 'data/sunrgbd/sunrgbd_train_test_data/' + str(
+            sequence_id) + '.pkl'
         assert os.path.exists(test_file)
 
         with open(test_file, 'rb') as file:
@@ -455,7 +542,6 @@ if __name__ == '__main__':
 
         # depth image
         depth_img = sample_data['depth_map']
-
         '''load metadata'''
         rgb_image = sample_data['rgb_img']
         cam_K = sample_data['camera']['K']
@@ -472,43 +558,63 @@ if __name__ == '__main__':
 
         gt_boxes = format_bbox(gt_box_data, 'gt')
         gt_layout = format_layout(gt_layout_data['bdb3D'])
-
         '''load prediction data'''
         pre_path = os.path.join(args.result_path, str(sequence_id))
-        pre_layout_data = sio.loadmat(os.path.join(pre_path, 'layout.mat'))['layout']
+        pre_layout_data = sio.loadmat(os.path.join(pre_path,
+                                                   'layout.mat'))['layout']
         pre_box_data = sio.loadmat(os.path.join(pre_path, 'bdb_3d.mat'))
 
         pre_boxes = format_bbox(pre_box_data, 'prediction')
         pre_layout = format_layout(pre_layout_data)
         pre_cam_R = sio.loadmat(os.path.join(pre_path, 'r_ex.mat'))['cam_R']
 
-        vtk_objects, pre_boxes = format_mesh(glob(os.path.join(pre_path, '*.obj')), pre_boxes)
+        vtk_objects, pre_boxes = format_mesh(
+            glob(os.path.join(pre_path, '*.obj')), pre_boxes)
 
-        scene_box = Box(rgb_image, depth_img, cam_K, gt_cam_R, pre_cam_R, gt_layout, pre_layout, gt_boxes, pre_boxes,
-                        'prediction', output_mesh=vtk_objects)
+        scene_box = Box(rgb_image,
+                        depth_img,
+                        cam_K,
+                        gt_cam_R,
+                        pre_cam_R,
+                        gt_layout,
+                        pre_layout,
+                        gt_boxes,
+                        pre_boxes,
+                        'prediction',
+                        output_mesh=vtk_objects)
         if args.min_obj <= scene_box.valid_objects_num <= args.max_obj:
-            scene_box.draw_projected_bdb3d('gt' if args.gt else 'prediction', if_save=if_save,
-                                           save_path=os.path.join(save_path, '%s_bbox.png' % (sequence_id)))
+            scene_box.draw_projected_bdb3d('gt' if args.gt else 'prediction',
+                                           if_save=if_save,
+                                           save_path=os.path.join(
+                                               save_path,
+                                               '%s_bbox.png' % (sequence_id)))
             # scene_box.draw_image()
-            scene_box.draw3D(if_save=if_save, save_path=os.path.join(save_path, '%s_recon.png' % (sequence_id)))
+            scene_box.draw3D(if_save=if_save,
+                             save_path=os.path.join(
+                                 save_path, '%s_recon.png' % (sequence_id)))
 
     if args.offscreen and args.save_path is not None:
-        args_str = ' '.join([f"--{k} {v if v is not True else ''}"
-                             for k, v in args.__dict__.items()
-                             if k not in ('offscreen') and v is not False])
-        os.system(f'xvfb-run -a -s "-screen 0 800x600x24" {sys.executable} utils/visualize.py {args_str}')
+        args_str = ' '.join([
+            f"--{k} {v if v is not True else ''}"
+            for k, v in args.__dict__.items()
+            if k not in ('offscreen') and v is not False
+        ])
+        os.system(
+            f'xvfb-run -a -s "-screen 0 800x600x24" {sys.executable} utils/visualize.py {args_str}'
+        )
     else:
         if args.search_folder not in (None, 'None') or args.sequence_id <= 0:
             if args.search_folder not in (None, 'None'):
                 files = glob(os.path.join(args.search_folder, '*'))
             elif args.sequence_id <= 0:
                 files = glob(os.path.join(args.result_path, '*'))
-            sequence_ids = set([int(re.findall('\d+', os.path.splitext(os.path.basename(d))[0])[0]) for d in files])
+            sequence_ids = set([
+                int(
+                    re.findall('\d+',
+                               os.path.splitext(os.path.basename(d))[0])[0])
+                for d in files
+            ])
             for i in tqdm(sequence_ids):
                 visualize(i, args)
         else:
             visualize(args.sequence_id, args)
-
-
-
-

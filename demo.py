@@ -168,7 +168,7 @@ def run(cfg):
     '''write and visualize outputs'''
     from net_utils.libs import get_layout_bdb_sunrgbd, get_rotation_matix_result, get_bdb_evaluation
     from scipy.io import savemat
-    from libs.tools import write_obj
+    from Lib.tools import write_obj
 
     lo_bdb3D_out = get_layout_bdb_sunrgbd(
         cfg.bins_tensor, est_data['lo_ori_reg_result'],

@@ -49,6 +49,7 @@ class PoseNet(nn.Module):
         }
         model_dict.update(pretrained_dict)
         self.resnet.load_state_dict(model_dict)
+        return
 
     def forward(self, x):
         x = self.resnet(x)
