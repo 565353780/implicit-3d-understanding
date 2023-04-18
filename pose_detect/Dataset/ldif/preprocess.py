@@ -184,6 +184,14 @@ class PreProcesser(object):
             ' -binary_sdf'
         os.system(cmd)
 
+        cmd = self.gaps_folder_path + 'msh2df ' + \
+            scaled_ply + ' ' + output_folder + '/fine_grid.grd' + \
+            ' -bbox ' + str(self.bbox) + \
+            ' -border 0' + \
+            ' -spacing ' + str(self.spacing / 2.0) + \
+            ' -estimate_sign'
+        os.system(cmd)
+
         if self.del_intermediate_result:
             remove_if_exists(normalized_obj)
             remove_if_exists(watertight_obj)
