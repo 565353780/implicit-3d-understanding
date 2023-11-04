@@ -189,7 +189,6 @@ octave-workspace
 
 ## project
 /out
-/data
 /wandb
 
 # compiled
